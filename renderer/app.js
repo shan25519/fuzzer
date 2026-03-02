@@ -181,7 +181,18 @@
             path: newConfig.sshPath,
             mgmtPort: newConfig.mgmtPort
           });
-          
+
+          // Display step-by-step deployment report
+          if (result.steps && result.steps.length) {
+            addLogEntry('info', `--- Deployment Report (${editingAgent}) ---`);
+            for (const step of result.steps) {
+              const cls = (step.status === 'ok' || step.status === 'installed') ? 'info'
+                        : (step.status === 'skipped' || step.status === 'warning') ? 'info'
+                        : 'error';
+              addLogEntry(cls, `  [${step.status.toUpperCase()}] ${step.name}: ${step.detail}`);
+            }
+          }
+
           if (result.error) {
             addLogEntry('error', `Deploy failed: ${result.error}`);
             alert(`Deployment failed:\n${result.error}`);
