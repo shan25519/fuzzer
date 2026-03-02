@@ -320,6 +320,64 @@ const send = (channel, data) => {
   }
 };
 
+// Deploy agent via SSH
+ipcMain.handle('deploy-agent', async (_event, opts) => {
+  const { role, host, user, path: remotePath, mgmtPort } = opts;
+  const { exec } = require('child_process');
+  const util = require('util');
+  const execAsync = util.promisify(exec);
+
+  try {
+    // 1. Create directory
+    await execAsync(`ssh -o StrictHostKeyChecking=accept-new ${user}@${host} "mkdir -p ${remotePath}"`);
+    
+    // 2. Copy files
+    const srcFiles = [
+      path.join(__dirname, 'client.js'),
+      path.join(__dirname, 'server.js'),
+      path.join(__dirname, 'lib')
+    ].join(' ');
+    
+    await execAsync(`scp -o StrictHostKeyChecking=accept-new -r ${srcFiles} ${user}@${host}:${remotePath}/`);
+    
+    // 3. Start agent
+    const cmd = `ssh -o StrictHostKeyChecking=accept-new ${user}@${host} "cd ${remotePath} && pkill -f 'node ${role}.js' || true && nohup node ${role}.js --control-port ${mgmtPort} > ${role}.log 2>&1 &"`;
+    await execAsync(cmd);
+    
+    // 4. Poll for readiness
+    const maxRetries = 15;
+    const retryDelay = 2000;
+    const http = require('http');
+    
+    const checkStatus = () => new Promise((resolve) => {
+      const req = http.get(`http://${host}:${mgmtPort}/status`, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          resolve(data.includes(role));
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.setTimeout(1000, () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise(r => setTimeout(r, retryDelay));
+      if (await checkStatus()) {
+        return { ok: true };
+      }
+    }
+    
+    return { error: 'Agent failed to start or is unreachable after deployment.' };
+
+  } catch (err) {
+    return { error: err.message || 'Unknown deployment error' };
+  }
+});
+
 // Connect to remote agents
 ipcMain.handle('distributed-connect', async (_event, opts) => {
   const { clientHost, clientPort, clientToken, serverHost, serverPort, serverToken } = opts;
