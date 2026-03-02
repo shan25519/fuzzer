@@ -33,18 +33,26 @@
   const statusBadge = document.getElementById('statusBadge');
   const distributedCheck = document.getElementById('distributedCheck');
   const distributedBar = document.getElementById('distributedBar');
-  const clientAgentHost = document.getElementById('clientAgentHost');
-  const clientAgentPort = document.getElementById('clientAgentPort');
-  const clientAgentToken = document.getElementById('clientAgentToken');
-  const serverAgentHost = document.getElementById('serverAgentHost');
-  const serverAgentPort = document.getElementById('serverAgentPort');
-  const serverAgentToken = document.getElementById('serverAgentToken');
+  const clientConfigBtn = document.getElementById('clientConfigBtn');
+  const serverConfigBtn = document.getElementById('serverConfigBtn');
   const clientStatusDot = document.getElementById('clientStatusDot');
   const clientStatusText = document.getElementById('clientStatusText');
   const serverStatusDot = document.getElementById('serverStatusDot');
   const serverStatusText = document.getElementById('serverStatusText');
   const connectBtn = document.getElementById('connectBtn');
   const disconnectBtn = document.getElementById('disconnectBtn');
+
+  // Modal elements
+  const configModal = document.getElementById('configModal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalClose = configModal.querySelector('.close');
+  const mgmtHost = document.getElementById('mgmtHost');
+  const mgmtPort = document.getElementById('mgmtPort');
+  const mgmtToken = document.getElementById('mgmtToken');
+  const datapathHostLabel = document.getElementById('datapathHostLabel');
+  const datapathHost = document.getElementById('datapathHost');
+  const datapathPort = document.getElementById('datapathPort');
+  const saveConfigBtn = document.getElementById('saveConfigBtn');
 
   // DUT elements
   const dutCheck = document.getElementById('dutCheck');
@@ -87,6 +95,55 @@
   let unsubAgentDone = null;
   let unsubAgentStatus = null;
   let statusPollTimer = null;
+
+  // Agent configurations
+  let clientAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9100, mgmtToken: '', datapathHost: 'localhost' };
+  let serverAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9101, mgmtToken: '', datapathHost: 'localhost' };
+  let editingAgent = null; // 'client' | 'server'
+
+  const PROTOCOL_DEFAULT_PORTS = {
+    tls: 443,
+    h2: 443,
+    quic: 443,
+  };
+
+  // Modal logic
+  function openConfigModal(role) {
+    editingAgent = role;
+    modalTitle.textContent = `${role === 'client' ? 'Client' : 'Server'} Agent Configuration`;
+    const config = role === 'client' ? clientAgentConfig : serverAgentConfig;
+
+    mgmtHost.value = config.mgmtHost;
+    mgmtPort.value = config.mgmtPort;
+    mgmtToken.value = config.mgmtToken;
+    datapathHost.value = config.datapathHost;
+
+    datapathHostLabel.textContent = role === 'client' ? 'Datapath IP' : 'Datapath Bind IP';
+    datapathHost.placeholder = role === 'client' ? 'e.g. 10.0.0.5' : 'e.g. 0.0.0.0';
+
+    configModal.style.display = 'block';
+  }
+
+  modalClose.onclick = () => { configModal.style.display = 'none'; };
+  window.onclick = (event) => { if (event.target === configModal) configModal.style.display = 'none'; };
+
+  saveConfigBtn.onclick = () => {
+    const config = {
+      mgmtHost: mgmtHost.value.trim(),
+      mgmtPort: parseInt(mgmtPort.value, 10),
+      mgmtToken: mgmtToken.value.trim(),
+      datapathHost: datapathHost.value.trim(),
+    };
+
+    if (editingAgent === 'client') clientAgentConfig = config;
+    else serverAgentConfig = config;
+
+    configModal.style.display = 'none';
+    addLogEntry('info', `${editingAgent === 'client' ? 'Client' : 'Server'} configuration updated`);
+  };
+
+  clientConfigBtn.addEventListener('click', () => openConfigModal('client'));
+  serverConfigBtn.addEventListener('click', () => openConfigModal('server'));
 
   // Mode toggle — hide host for server mode
   modeSelect.addEventListener('change', () => {
@@ -143,17 +200,8 @@
   disconnectBtn.addEventListener('click', handleDisconnect);
 
   async function handleConnect() {
-    const cHost = clientAgentHost.value.trim();
-    const cPort = clientAgentPort.value.trim();
-    const cToken = clientAgentToken.value.trim();
-    const sHost = serverAgentHost.value.trim();
-    const sPort = serverAgentPort.value.trim();
-    const sToken = serverAgentToken.value.trim();
-
-    if (!cHost && !sHost) {
-      addLogEntry('error', 'Enter at least one agent address');
-      return;
-    }
+    const c = clientAgentConfig;
+    const s = serverAgentConfig;
 
     setAgentStatus('client', 'connecting');
     setAgentStatus('server', 'connecting');
@@ -161,44 +209,36 @@
 
     try {
       const result = await window.fuzzer.distributedConnect({
-        clientHost: cHost || null,
-        clientPort: cPort || null,
-        clientToken: cToken || null,
-        serverHost: sHost || null,
-        serverPort: sPort || null,
-        serverToken: sToken || null,
+        clientHost: c.mgmtHost || null,
+        clientPort: c.mgmtPort || null,
+        clientToken: c.mgmtToken || null,
+        serverHost: s.mgmtHost || null,
+        serverPort: s.mgmtPort || null,
+        serverToken: s.mgmtToken || null,
       });
 
       if (result.client) {
         setAgentStatus('client', result.client.status || 'idle');
-        addLogEntry('info', `Client agent connected: ${cHost}:${cPort} (${result.client.status})`);
+        addLogEntry('info', `Client agent connected: ${c.mgmtHost}:${c.mgmtPort}`);
       } else if (result.clientError) {
         setAgentStatus('client', 'error');
         addLogEntry('error', `Client agent: ${result.clientError}`);
-      } else if (!cHost) {
-        setAgentStatus('client', 'idle');
       }
 
       if (result.server) {
         setAgentStatus('server', result.server.status || 'idle');
-        addLogEntry('info', `Server agent connected: ${sHost}:${sPort} (${result.server.status})`);
+        addLogEntry('info', `Server agent connected: ${s.mgmtHost}:${s.mgmtPort}`);
       } else if (result.serverError) {
         setAgentStatus('server', 'error');
         addLogEntry('error', `Server agent: ${result.serverError}`);
-      } else if (!sHost) {
-        setAgentStatus('server', 'idle');
       }
 
       const anyConnected = result.client || result.server;
       if (anyConnected) {
         agentsConnected = true;
         disconnectBtn.disabled = false;
-        clientAgentHost.disabled = true;
-        clientAgentPort.disabled = true;
-        clientAgentToken.disabled = true;
-        serverAgentHost.disabled = true;
-        serverAgentPort.disabled = true;
-        serverAgentToken.disabled = true;
+        clientConfigBtn.disabled = true;
+        serverConfigBtn.disabled = true;
         startStatusPolling();
       } else {
         connectBtn.disabled = false;
@@ -221,12 +261,8 @@
     setAgentStatus('server', 'idle');
     connectBtn.disabled = false;
     disconnectBtn.disabled = true;
-    clientAgentHost.disabled = false;
-    clientAgentPort.disabled = false;
-    clientAgentToken.disabled = false;
-    serverAgentHost.disabled = false;
-    serverAgentPort.disabled = false;
-    serverAgentToken.disabled = false;
+    clientConfigBtn.disabled = false;
+    serverConfigBtn.disabled = false;
     addLogEntry('info', 'Disconnected from agents');
   }
 
@@ -732,8 +768,6 @@
       return;
     }
 
-    const host = hostInput.value.trim() || 'localhost';
-    const port = parseInt(portInput.value, 10) || 443;
     const delay = parseInt(delayInput.value, 10) || 100;
     const timeout = parseInt(timeoutInput.value, 10) || 5000;
 
@@ -764,12 +798,22 @@
     // Configure agents
     addLogEntry('info', `Configuring agents: ${clientScenarios.length} client, ${serverScenarios.length} server scenarios`);
 
+    const defaultPort = PROTOCOL_DEFAULT_PORTS[activeProtocol] || 443;
+
     try {
       const configResult = await window.fuzzer.distributedConfigure({
         clientScenarios: clientScenarios.length > 0 ? clientScenarios : null,
         serverScenarios: serverScenarios.length > 0 ? serverScenarios : null,
-        clientConfig: { host, port, delay, timeout, protocol: activeProtocol, dut },
-        serverConfig: { hostname: host, port: parseInt(portInput.value, 10) || 4433, delay, timeout, protocol: activeProtocol, dut },
+        clientConfig: {
+          host: clientAgentConfig.datapathHost,
+          port: defaultPort,
+          delay, timeout, protocol: activeProtocol, dut
+        },
+        serverConfig: {
+          hostname: serverAgentConfig.datapathHost,
+          port: defaultPort,
+          delay, timeout, protocol: activeProtocol, dut
+        },
       });
 
       if (configResult.error) {
@@ -1109,6 +1153,8 @@
     if (distributedMode) {
       connectBtn.disabled = state || agentsConnected;
       disconnectBtn.disabled = state || !agentsConnected;
+      clientConfigBtn.disabled = state || agentsConnected;
+      serverConfigBtn.disabled = state || agentsConnected;
     }
 
     if (state) {
