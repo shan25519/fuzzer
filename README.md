@@ -1,15 +1,18 @@
-# TLS/TCP Protocol Fuzzer
+# Protocol Fuzzer
 
-A protocol-level TLS fuzzer that tests middlebox and TLS implementation behavior by sending crafted packets over raw TCP. No actual TLS encryption is performed — every byte of every handshake message is constructed manually, giving full control over protocol violations, malformations, and edge cases.
+A multi-protocol fuzzer for testing TLS, HTTP/2, and QUIC implementations. Every byte of every handshake message is constructed manually, giving full control over protocol violations, malformations, and edge cases. No actual encryption is performed.
 
-**231 fuzzing scenarios** across **25 categories** covering handshake ordering, record layer attacks, certificate field fuzzing, CVE detection, and more.
+**340+ fuzzing scenarios** across **38 categories** covering TLS handshake attacks, HTTP/2 frame manipulation, QUIC transport fuzzing, CVE detection, certificate field fuzzing, and more.
+
+Supports three interfaces: **Electron GUI**, **CLI**, and **distributed mode** with remote agents on separate VMs.
 
 ---
 
 ## Requirements
 
 - **Node.js** 18 or later
-- **Electron** 33+ (only needed for the GUI — CLI works without it)
+- **Electron** 40+ (only needed for the GUI)
+- **npm** (for dependency installation)
 
 ```bash
 git clone <repo-url>
@@ -17,9 +20,35 @@ cd fuzzer
 npm install
 ```
 
+### Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `xml2js` | XML parsing for PAN-OS firewall integration (DUT mode) |
+| `electron` | GUI application framework (dev dependency) |
+
+No other external dependencies. All protocol handling (TLS, HTTP/2 frames, QUIC packets, X.509 certificates) is implemented in pure JavaScript.
+
 ---
 
 ## Quick Start
+
+### Self-contained test (no external target needed)
+
+Launch the GUI and enable **Local Target** mode:
+
+```bash
+npm start
+```
+
+1. Select protocol tab (TLS / HTTP/2 / QUIC)
+2. Select mode (Client or Server)
+3. Check **Local Target** in the toolbar
+4. Select scenarios and click **RUN**
+
+The fuzzer automatically spawns a well-behaved counterpart:
+- **Client mode**: starts a compliant local server as the target
+- **Server mode**: starts a compliant local client that connects to the fuzzing server
 
 ### Fuzz a remote server (client mode)
 
@@ -41,117 +70,210 @@ npm start
 
 ---
 
-## Running Client and Server on Different Hosts
+## Protocols
 
-The fuzzer separates cleanly into two standalone components that can run on different machines. The **server** acts as a malicious TLS endpoint (with a baked-in self-signed certificate) and the **client** sends crafted TLS messages to a target.
+### TLS (Categories A-Z)
 
-### Use Case 1: Test how a client/middlebox handles malicious server responses
+240 scenarios across 26 categories. Manually constructs TLS records over raw TCP.
 
-You have a client application or middlebox on **Host B** that you want to test. You run the fuzzer's server on **Host A** so it sends malformed TLS handshakes to anything that connects.
+**Supported versions:** SSL 3.0, TLS 1.0, 1.1, 1.2, 1.3
+
+**Certificate generation:** Auto-generates RSA 2048-bit self-signed X.509 certificates with configurable CN/SAN, SHA256 signatures, and proper v3 extensions.
+
+### HTTP/2 (Categories AA-AL)
+
+70 scenarios across 12 categories. Uses Node.js `http2` module with TLS+ALPN negotiation.
+
+**Features:** Frame-level fuzzing, HPACK manipulation, flow control attacks, stream abuse, server-to-client attacks.
+
+### QUIC (Categories QA-QL)
+
+32+ scenarios across 12 categories. Custom QUIC packet builder over UDP (`dgram`).
+
+**Features:** Initial/Handshake/0-RTT packet fuzzing, transport parameter manipulation, connection migration, PQC keyshare testing, server-to-client attacks.
+
+---
+
+## Running on Separate VMs
+
+The fuzzer's client and server are standalone components that can run on different machines. This section covers all deployment scenarios with step-by-step instructions.
+
+### Prerequisites for each VM
+
+```bash
+# Install Node.js 18+
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash -
+sudo apt-get install -y nodejs
+
+# Clone and install
+git clone <repo-url>
+cd fuzzer
+npm install
+```
+
+Verify installation:
+
+```bash
+node cli.js list
+```
+
+### Use Case 1: Test how a server handles malicious client messages
+
+You have a TLS/HTTP/2/QUIC server on **VM B** that you want to fuzz. Run the fuzzer client on **VM A**.
 
 ```
-  Host A (Attacker)                    Host B (Target)
+  VM A (Attacker)                     VM B (Target)
   ┌──────────────────┐                ┌──────────────────┐
-  │  node server.js  │◄──── TCP ─────│  client app /    │
+  │  node client.js  │────── TCP ────>│  TLS server      │
+  │  (fuzzed client) │                │  (nginx, haproxy │
+  │                  │<──── TLS ─────│   openssl, etc.) │
+  └──────────────────┘  responses     └──────────────────┘
+```
+
+**On VM A** (the fuzzer):
+
+```bash
+# TLS — all client scenarios
+node client.js <vm-b-ip> 443 --scenario all --verbose
+
+# TLS — specific category
+node client.js <vm-b-ip> 443 --category I --verbose    # CVE detection
+
+# HTTP/2
+node client.js <vm-b-ip> 443 --category AA --verbose   # HTTP/2 rapid attacks
+
+# QUIC
+node client.js <vm-b-ip> 443 --category QA --verbose   # QUIC handshake fuzzing
+
+# Record traffic for Wireshark analysis
+node client.js <vm-b-ip> 443 --scenario all --pcap capture.pcap
+```
+
+### Use Case 2: Test how a client handles malicious server responses
+
+You have a client application or middlebox on **VM B** that you want to test. Run the fuzzer server on **VM A** so it sends malformed handshakes to anything that connects.
+
+```
+  VM A (Attacker)                     VM B (Target)
+  ┌──────────────────┐                ┌──────────────────┐
+  │  node server.js  │<──── TCP ─────│  client app /    │
   │  port 4433       │                │  middlebox /     │
-  │  (fuzzed server) │────── TLS ────►│  browser         │
+  │  (fuzzed server) │────── TLS ───>│  browser         │
   └──────────────────┘  malformed     └──────────────────┘
                         responses
 ```
 
-**Step 1 — On Host A** (the fuzzer server):
+**Step 1 — On VM A** (the fuzzer server):
 
 ```bash
+# TLS server — certificate field fuzzing
+node server.js 4433 --hostname target.example.com --category W --verbose
+
+# TLS server — all server-side scenarios
 node server.js 4433 --hostname target.example.com --scenario all --verbose
+
+# HTTP/2 server — server-to-client attacks
+node server.js 4433 --hostname target.example.com --category AJ --verbose
+
+# QUIC server — server-to-client attacks
+node server.js 4433 --hostname target.example.com --category QL --verbose
 ```
 
-This will:
-- Generate a self-signed certificate for `target.example.com`
-- Print the certificate fingerprint
+The server will:
+- Generate a self-signed certificate for the specified hostname
+- Print the certificate SHA256 fingerprint
 - Listen on `0.0.0.0:4433` (all interfaces)
-- Wait for a connection, run the first scenario, then wait for the next connection
+- Wait for a connection, run the next scenario, then wait again
 
-Output:
-```
-  TLS/TCP Protocol Fuzzer — Server
-
-  Listening on  0.0.0.0:4433
-  Certificate   CN=target.example.com
-  SHA256        88:54:25:7B:B4:3D:85:F1:...
-  Cert size     757 bytes (DER)
-
-  Scenarios     10 scenario(s) queued
-```
-
-**Step 2 — On Host B** (the target):
-
-Point your client/browser/middlebox at Host A:
+**Step 2 — On VM B** (the target client):
 
 ```bash
-# Example: use curl or openssl to connect
-openssl s_client -connect <host-a-ip>:4433
+# Connect with openssl
+openssl s_client -connect <vm-a-ip>:4433
 
-# Or configure your application to connect to <host-a-ip>:4433
+# Connect with curl
+curl -k https://<vm-a-ip>:4433/
+
+# HTTP/2 client
+curl -k --http2 https://<vm-a-ip>:4433/
+
+# QUIC/HTTP3 client
+curl -k --http3 https://<vm-a-ip>:4433/
+
+# Or point your application/browser at <vm-a-ip>:4433
 ```
 
-Each time a client connects, the server runs the next scenario in the queue and sends fuzzed responses. The server logs what the client did (accepted, rejected, sent alert, closed connection).
+Each time a client connects, the server runs the next scenario in the queue.
 
-**Run a specific category** (e.g., certificate field fuzzing):
+### Use Case 3: Test a middlebox (IDS/WAF/Proxy)
 
-```bash
-node server.js 4433 --hostname evil.test --category W --verbose
-```
-
-### Use Case 2: Test how a server handles malicious client messages
-
-You have a TLS server on **Host B** that you want to fuzz. You run the fuzzer's client on **Host A**.
+Run the fuzzer on both sides of a middlebox to test how it handles protocol violations.
 
 ```
-  Host A (Attacker)                    Host B (Target)
-  ┌──────────────────┐                ┌──────────────────┐
-  │  node client.js  │────── TCP ────►│  TLS server      │
-  │  (fuzzed client) │                │  (nginx, etc.)   │
-  │                  │◄──── TLS ─────│                  │
-  └──────────────────┘  responses     └──────────────────┘
-```
-
-**On Host A** (the fuzzer client):
-
-```bash
-node client.js <host-b-ip> 443 --scenario all
-```
-
-This connects to the target, sends each fuzz scenario, records the response, runs health probes to detect crashes, and grades the server's behavior.
-
-**Run a specific category:**
-
-```bash
-node client.js <host-b-ip> 443 --category A --verbose
-```
-
-### Use Case 3: Both sides on different hosts
-
-Test a middlebox (IDS/WAF/proxy) sitting between client and server. Run the fuzzer server on one side and the fuzzer client on the other, with the middlebox in the path.
-
-```
-  Host A                Middlebox              Host B
+  VM A                  Middlebox              VM B
   ┌────────────┐      ┌────────────┐      ┌────────────┐
-  │ client.js  │─────►│  IDS/WAF/  │─────►│ server.js  │
-  │            │◄─────│  Proxy     │◄─────│            │
+  │ client.js  │─────>│  IDS/WAF/  │─────>│ server.js  │
+  │            │<─────│  Proxy     │<─────│            │
   └────────────┘      └────────────┘      └────────────┘
 ```
 
-**Host B** (fuzzer server — behind the middlebox):
+**VM B** (fuzzer server — behind the middlebox):
 
 ```bash
 node server.js 4433 --hostname test.internal --category B --verbose
 ```
 
-**Host A** (fuzzer client — in front of the middlebox):
+**VM A** (fuzzer client — in front of the middlebox):
 
 ```bash
 node client.js <middlebox-ip> 4433 --scenario all --verbose
 ```
+
+### Use Case 4: Distributed mode with remote agents
+
+For automated testing across VMs, use the built-in agent system. The GUI (or controller) orchestrates remote agents over HTTP.
+
+```
+  Controller (GUI)
+       │
+       ├──── HTTP ────> VM A: Client Agent (port 9100)
+       │                  └─── fuzzes ──> Target
+       │
+       └──── HTTP ────> VM B: Server Agent (port 9101)
+                          └─── fuzzes <── Target Client
+```
+
+**VM A** — Start client agent:
+
+```bash
+node client.js <target-host> <target-port> --agent --control-port 9100 --token mysecret
+```
+
+**VM B** — Start server agent:
+
+```bash
+node server.js <port> --agent --control-port 9101 --token mysecret
+```
+
+**Controller** (your machine with the GUI):
+
+1. Launch: `npm start`
+2. Check **Distributed** in the toolbar
+3. Enter agent IPs, ports, and tokens
+4. Click **CONNECT**
+5. Select scenarios and click **RUN**
+
+The controller pushes configuration to both agents, starts them simultaneously, and streams results back to the GUI in real-time.
+
+**Agent HTTP API:**
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/status` | GET | Agent role and status |
+| `/configure` | POST | Push scenarios and settings |
+| `/run` | POST | Start execution |
+| `/stop` | POST | Stop execution |
+| `/results` | GET | Retrieve final results |
 
 ---
 
@@ -162,29 +284,33 @@ node client.js <middlebox-ip> 4433 --scenario all --verbose
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--scenario <name\|all>` | Run a specific scenario or all client scenarios | required |
-| `--category <A-Y>` | Run all client scenarios in a category | — |
+| `--category <cat>` | Run all client scenarios in a category (A-Z, AA-AL, QA-QL) | -- |
 | `--delay <ms>` | Delay between actions | 100 |
 | `--timeout <ms>` | Connection timeout | 5000 |
 | `--verbose` | Show hex dumps of all packets | off |
 | `--json` | Output results as JSON | off |
-| `--pcap <file>` | Record packets to PCAP file | — |
+| `--pcap <file>` | Record packets to PCAP file | -- |
+| `--agent` | Run as remote agent (HTTP server) | off |
+| `--control-port <port>` | Agent control port | 9100 |
+| `--token <string>` | Authentication token for agent mode | -- |
 
 ### `node server.js <port> [options]`
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--scenario <name\|all>` | Run a specific scenario or all server scenarios | required |
-| `--category <A-Y>` | Run all server scenarios in a category | — |
+| `--category <cat>` | Run all server scenarios in a category (A-Z, AA-AL, QA-QL) | -- |
 | `--hostname <name>` | Certificate CN and SAN | localhost |
 | `--delay <ms>` | Delay between actions | 100 |
 | `--timeout <ms>` | Connection timeout | 10000 |
 | `--verbose` | Show hex dumps of all packets | off |
 | `--json` | Output results as JSON | off |
-| `--pcap <file>` | Record packets to PCAP file | — |
+| `--pcap <file>` | Record packets to PCAP file | -- |
+| `--agent` | Run as remote agent (HTTP server) | off |
+| `--control-port <port>` | Agent control port | 9101 |
+| `--token <string>` | Authentication token for agent mode | -- |
 
 ### `node cli.js <command> [options]`
-
-Unified CLI with both modes:
 
 ```bash
 node cli.js list                                          # List all scenarios
@@ -195,6 +321,8 @@ node cli.js server <port> --hostname x --scenario all     # Server mode
 ---
 
 ## Fuzzing Categories
+
+### TLS (Categories A-Z) — 240 scenarios
 
 | Cat | Name | Side | Scenarios | Severity |
 |-----|------|------|-----------|----------|
@@ -223,22 +351,79 @@ node cli.js server <port> --hostname x --scenario all     # Server mode
 | W | Server Certificate X.509 Fuzzing | server | 15 | medium |
 | X | Client Certificate Abuse | client | 12 | medium |
 | Y | Certificate Chain & Message Structure | server | 8 | medium |
+| Z | TLS Application Layer | client | 1 | low |
 
-Categories **W** and **Y** are **opt-in** — they require server mode and are skipped by `--scenario all`. Use `--category W` or `--category Y` to run them explicitly.
+Categories **W** and **Y** are opt-in (server-side only) — they are skipped by `--scenario all`. Use `--category W` or `--category Y` explicitly.
+
+### HTTP/2 (Categories AA-AL) — 70 scenarios
+
+| Cat | Name | Side | Severity |
+|-----|------|------|----------|
+| AA | CVE & Rapid Attack | client | critical |
+| AB | Flood / Resource Exhaustion | client | high |
+| AC | Stream & Flow Control Violations | client | high |
+| AD | Frame Structure & Header Attacks | client | medium |
+| AE | Stream Abuse Extensions | client | high |
+| AF | Extended Frame Attacks | client | medium |
+| AG | Flow Control Attacks | client | high |
+| AH | Connectivity & TLS Probes | client | info |
+| AI | General Frame Mutation | client | low |
+| AJ | Server-to-Client Attacks | server | high |
+| AK | Server Protocol Violations | server | high |
+| AL | Server Header Violations | server | medium |
+
+Categories **AJ**, **AK**, **AL** are server-side — they run on the fuzzer server and attack connecting clients.
+
+### QUIC (Categories QA-QL) — 32+ scenarios
+
+| Cat | Name | Side | Severity |
+|-----|------|------|----------|
+| QA | Handshake & Connection Initial | client | high |
+| QB | Transport Parameters & ALPN | client | medium |
+| QC | Resource Exhaustion & DoS | client | critical |
+| QD | Flow Control & Stream Errors | mixed | medium |
+| QE | Connection Migration & Path | mixed | medium |
+| QF | Frame Structure & Mutation | mixed | low |
+| QG | QUIC-TLS Handshake Order & State | client | high |
+| QH | QUIC-TLS Parameter & Extension Fuzzing | client | medium |
+| QI | QUIC-TLS Record & Alert Injection | client | high |
+| QJ | QUIC-TLS Known CVEs & PQC | client | critical |
+| QK | QUIC-TLS Certificate Fuzzing | client | medium |
+| QL | Server-to-Client Attacks | server | high |
+
+Categories **QG-QK** are auto-generated by wrapping TLS scenarios (A-Y) in QUIC Initial packets with CRYPTO frames. Category **QL** contains purpose-built server-to-client attack scenarios.
 
 ---
 
-## Server Certificate
+## Local Target Mode
 
-When running in server mode, the fuzzer automatically generates a self-signed RSA 2048-bit certificate at startup. The certificate includes:
+The fuzzer can run self-contained without any external target. In local mode, the fuzzer automatically spawns a well-behaved protocol counterpart:
 
-- **Subject CN**: set via `--hostname` (default: `localhost`)
-- **SAN**: dNSName matching the hostname
-- **Validity**: 2024-01-01 to 2035-01-01
-- **Signature**: SHA256withRSA (properly signed, not random bytes)
-- **Issuer**: "TLS Fuzzer CA"
+- **Client fuzz tests**: A compliant local server starts on the target port. The fuzzing client sends malformed packets to this server and observes how a proper implementation responds.
+- **Server fuzz tests**: The fuzzing server starts normally, then a compliant local client automatically connects per-scenario, sending proper protocol messages (ClientHello, HTTP/2 requests, QUIC Initial packets).
 
-The SHA256 fingerprint is displayed on startup. Category W scenarios replace this certificate with specifically malformed variants (expired, wrong CN, null bytes, etc.) to test certificate validation.
+### GUI
+
+Check **Local Target** in the toolbar. The host field is automatically set to `localhost` and disabled.
+
+### How it works
+
+| Protocol | Local Server | Local Client |
+|----------|-------------|-------------|
+| TLS | `tls.createServer()` with auto-generated cert | `tls.connect()` sends real ClientHello |
+| HTTP/2 | `http2.createSecureServer()` responds 200 OK | `http2.connect()` sends GET / |
+| QUIC | UDP socket responds with QUIC Initial + synthetic ServerHello | UDP socket sends QUIC Initial + synthetic ClientHello |
+
+---
+
+## Side Validation
+
+Each scenario has a `side` field (`client` or `server`). The fuzzer enforces this at multiple levels:
+
+1. **UI layer**: Only shows scenarios matching the selected mode
+2. **Backend layer**: All 8 runners (unified + protocol-specific) reject mismatched scenarios with status `SKIPPED`
+
+A server-side scenario will never execute in client mode, and vice versa.
 
 ---
 
@@ -248,32 +433,148 @@ Each scenario produces a result:
 
 | Status | Meaning |
 |--------|---------|
-| **DROPPED** | Server/client closed or reset the connection |
-| **PASSED** | Server/client accepted the fuzzed message |
+| **DROPPED** | Connection closed or reset |
+| **PASSED** | Target accepted the fuzzed message |
 | **TIMEOUT** | No response within timeout period |
 | **ERROR** | Connection or execution error |
+| **SKIPPED** | Scenario not applicable (wrong side) |
 
-Results are compared against expected outcomes to produce a verdict (**AS EXPECTED** or **UNEXPECTED**) and an overall grade from **A** (all tests passed) to **F** (critical failures).
+Results are compared against expected outcomes to produce a verdict (**AS EXPECTED** or **UNEXPECTED**) and an overall grade from **A** (all correct) to **F** (critical failures).
 
-The `--pcap` flag records all traffic to a PCAP file for analysis in Wireshark.
+### Health Probes
+
+After timeouts or errors, the client automatically runs health probes (TCP connect + HTTPS HEAD request) to detect if the target crashed. Results include `hostDown` status and probe latency.
+
+### PCAP Recording
+
+The `--pcap` flag records all traffic to standard PCAP format for analysis in Wireshark:
+
+```bash
+node client.js target.com 443 --scenario all --pcap capture.pcap
+```
+
+---
+
+## Server Certificate
+
+When running in server mode, the fuzzer auto-generates a self-signed RSA 2048-bit certificate:
+
+- **Subject CN**: set via `--hostname` (default: `localhost`)
+- **SAN**: dNSName matching the hostname
+- **Validity**: 2024-01-01 to 2035-01-01
+- **Signature**: SHA256withRSA
+- **Issuer**: "TLS Fuzzer CA"
+
+The SHA256 fingerprint is displayed on startup. Category W scenarios replace this with specifically malformed certificates (expired, wrong CN, null bytes, etc.).
+
+---
+
+## DUT (Device Under Test) Mode
+
+Monitor a Palo Alto Networks (PAN-OS) firewall during fuzzing to detect crashes or anomalies.
+
+1. Check **DUT** in the toolbar
+2. Enter firewall IP and credentials (password or API key)
+3. A separate monitor window opens with real-time system info, log queries, and CLI command execution
+
+---
+
+## GUI Features
+
+- **Protocol tabs**: TLS, HTTP/2, QUIC with per-protocol scenario lists
+- **Mode select**: Client / Server with automatic scenario filtering
+- **Live results table**: Scenario, category, status, health, finding, verdict
+- **Packet log**: Real-time protocol message display with optional hex dumps
+- **Progress bar**: Scenario progress during execution
+- **Loop count**: Run scenarios 1-1000 times
+- **Export**: Save results as JSON
+- **PCAP toggle**: Record traffic to file
+- **Local Target**: Self-contained testing without external targets
+- **Distributed**: Remote agent orchestration across VMs
+- **DUT**: Firewall monitoring during tests
+
+---
+
+## Project Structure
+
+```
+fuzzer/
+  main.js                      Electron main process
+  cli.js                       Unified CLI
+  client.js                    Standalone client CLI
+  server.js                    Standalone server CLI
+  preload.js                   Electron IPC bridge
+  renderer/
+    index.html                 GUI layout
+    app.js                     GUI logic
+    styles.css                 Styling
+  lib/
+    scenarios.js               TLS scenarios (240)
+    http2-scenarios.js          HTTP/2 scenarios (70)
+    quic-scenarios.js           QUIC scenarios (32+)
+    unified-client.js           Multi-protocol client dispatcher
+    unified-server.js           Multi-protocol server dispatcher
+    fuzzer-client.js            TLS client engine
+    fuzzer-server.js            TLS server engine
+    http2-fuzzer-client.js      HTTP/2 client engine
+    http2-fuzzer-server.js      HTTP/2 server engine
+    quic-fuzzer-client.js       QUIC client engine
+    quic-fuzzer-server.js       QUIC server engine
+    well-behaved-server.js      Compliant server for local mode
+    well-behaved-client.js      Compliant client for local mode
+    agent.js                    Remote agent HTTP server
+    controller.js               Distributed mode orchestrator
+    cert-gen.js                 RSA/X.509 certificate generation
+    constants.js                TLS protocol constants
+    record.js                   TLS record construction
+    handshake.js                TLS handshake message building
+    x509.js                     X.509 DER encoding
+    frame-generator.js          HTTP/2 frame construction
+    quic-packet.js              QUIC packet building
+    grader.js                   Result classification and grading
+    compute-expected.js         Expected outcome computation
+    protocol-compliance.js      RFC compliance checking
+    pcap-writer.js              PCAP file recording
+    logger.js                   Event and hex dump logging
+    tcp-tricks.js               TCP manipulation (FIN, RST)
+```
 
 ---
 
 ## Examples
 
 ```bash
-# Fuzz Google's TLS implementation with all client scenarios
-node client.js google.com 443 --scenario all
+# Self-contained TLS fuzzing (no external target)
+npm start   # GUI → check "Local Target" → select scenarios → RUN
+
+# Fuzz a remote TLS server with all client scenarios
+node client.js example.com 443 --scenario all
 
 # Test certificate validation on a middlebox
 node server.js 4433 --hostname evil.test --category W --verbose
 
-# Run a specific CVE detection scenario
+# HTTP/2 rapid reset CVE detection
+node client.js target.com 443 --category AA --verbose
+
+# QUIC handshake fuzzing
+node client.js target.com 443 --category QA --verbose
+
+# QUIC server-to-client attacks (local mode)
+node server.js 4433 --category QL --verbose
+
+# Run a specific scenario
 node client.js target.com 443 --scenario heartbleed-test --verbose
 
-# Record traffic for later analysis
+# Record traffic for Wireshark
 node client.js target.com 443 --scenario all --pcap capture.pcap
+
+# JSON output for automation
+node client.js target.com 443 --scenario all --json
 
 # List all available scenarios
 node cli.js list
+
+# Distributed agents on remote VMs
+node client.js target.com 443 --agent --control-port 9100 --token s3cret
+node server.js 4433 --agent --control-port 9101 --token s3cret
 ```
