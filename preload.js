@@ -34,7 +34,6 @@ contextBridge.exposeInMainWorld('fuzzer', {
   distributedStatus: (role) => ipcRenderer.invoke('distributed-status', role),
   distributedDisconnect: () => ipcRenderer.invoke('distributed-disconnect'),
   distributedResults: (role) => ipcRenderer.invoke('distributed-results', role),
-  deployAgent: (opts) => ipcRenderer.invoke('deploy-agent', opts),
   onAgentDone: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on('distributed-agent-done', listener);

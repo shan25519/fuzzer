@@ -51,11 +51,7 @@
   const mgmtToken = document.getElementById('mgmtToken');
   const datapathHostLabel = document.getElementById('datapathHostLabel');
   const datapathHost = document.getElementById('datapathHost');
-  const datapathPortLabel = document.getElementById('datapathPortLabel');
   const datapathPort = document.getElementById('datapathPort');
-  const autoDeployCheck = document.getElementById('autoDeployCheck');
-  const sshUser = document.getElementById('sshUser');
-  const sshPath = document.getElementById('sshPath');
   const saveConfigBtn = document.getElementById('saveConfigBtn');
 
   // DUT elements
@@ -101,8 +97,8 @@
   let statusPollTimer = null;
 
   // Agent configurations
-  let clientAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9100, mgmtToken: '', datapathHost: 'localhost', datapathPort: 443, autoDeploy: false, sshUser: '', sshPath: '/home/claude/fuzzer' };
-  let serverAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9101, mgmtToken: '', datapathHost: 'localhost', datapathPort: 443, autoDeploy: false, sshUser: '', sshPath: '/home/claude/fuzzer' };
+  let clientAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9100, mgmtToken: '', datapathHost: 'localhost' };
+  let serverAgentConfig = { mgmtHost: 'localhost', mgmtPort: 9101, mgmtToken: '', datapathHost: 'localhost' };
   let editingAgent = null; // 'client' | 'server'
 
   const PROTOCOL_DEFAULT_PORTS = {
@@ -121,20 +117,9 @@
     mgmtPort.value = config.mgmtPort;
     mgmtToken.value = config.mgmtToken;
     datapathHost.value = config.datapathHost;
-    datapathPort.value = config.datapathPort;
-    autoDeployCheck.checked = config.autoDeploy || false;
-    sshUser.value = config.sshUser || '';
-    sshPath.value = config.sshPath || '/home/claude/fuzzer';
 
-    if (role === 'client') {
-      datapathHostLabel.textContent = 'Target IP';
-      datapathPortLabel.textContent = 'Target Port';
-      datapathHost.placeholder = 'e.g. 10.0.0.5';
-    } else {
-      datapathHostLabel.textContent = 'Bind IP';
-      datapathPortLabel.textContent = 'Bind Port';
-      datapathHost.placeholder = 'e.g. 0.0.0.0';
-    }
+    datapathHostLabel.textContent = role === 'client' ? 'Datapath IP' : 'Datapath Bind IP';
+    datapathHost.placeholder = role === 'client' ? 'e.g. 10.0.0.5' : 'e.g. 0.0.0.0';
 
     configModal.style.display = 'block';
   }
@@ -142,66 +127,19 @@
   modalClose.onclick = () => { configModal.style.display = 'none'; };
   window.onclick = (event) => { if (event.target === configModal) configModal.style.display = 'none'; };
 
-  saveConfigBtn.onclick = async () => {
-    const newConfig = {
+  saveConfigBtn.onclick = () => {
+    const config = {
       mgmtHost: mgmtHost.value.trim(),
       mgmtPort: parseInt(mgmtPort.value, 10),
       mgmtToken: mgmtToken.value.trim(),
       datapathHost: datapathHost.value.trim(),
-      datapathPort: parseInt(datapathPort.value, 10),
-      autoDeploy: autoDeployCheck.checked,
-      sshUser: sshUser.value.trim(),
-      sshPath: sshPath.value.trim(),
     };
 
-    // Validation: Client Target and Server Bind must match
-    const otherConfig = editingAgent === 'client' ? serverAgentConfig : clientAgentConfig;
-    if (newConfig.datapathHost !== otherConfig.datapathHost || newConfig.datapathPort !== otherConfig.datapathPort) {
-      alert(`Error: Client Target IP/Port must match Server Bind IP/Port.\n\nCurrent Client: ${editingAgent === 'client' ? newConfig.datapathHost : otherConfig.datapathHost}:${editingAgent === 'client' ? newConfig.datapathPort : otherConfig.datapathPort}\nCurrent Server: ${editingAgent === 'server' ? newConfig.datapathHost : otherConfig.datapathHost}:${editingAgent === 'server' ? newConfig.datapathPort : otherConfig.datapathPort}`);
-    }
+    if (editingAgent === 'client') clientAgentConfig = config;
+    else serverAgentConfig = config;
 
-    if (editingAgent === 'client') clientAgentConfig = newConfig;
-    else serverAgentConfig = newConfig;
-
-    if (newConfig.autoDeploy) {
-      if (!newConfig.sshUser || !newConfig.mgmtHost || newConfig.mgmtHost === 'localhost' || newConfig.mgmtHost === '127.0.0.1') {
-        alert('Cannot auto-deploy to localhost or without an SSH user. Skipping deployment.');
-        addLogEntry('error', `${editingAgent === 'client' ? 'Client' : 'Server'} auto-deploy skipped (invalid host/user)`);
-        configModal.style.display = 'none';
-      } else {
-        saveConfigBtn.disabled = true;
-        saveConfigBtn.textContent = 'DEPLOYING...';
-        addLogEntry('info', `Auto-deploying ${editingAgent === 'client' ? 'Client' : 'Server'} to ${newConfig.sshUser}@${newConfig.mgmtHost}:${newConfig.sshPath}...`);
-        
-        try {
-          const result = await window.fuzzer.deployAgent({
-            role: editingAgent,
-            host: newConfig.mgmtHost,
-            user: newConfig.sshUser,
-            path: newConfig.sshPath,
-            mgmtPort: newConfig.mgmtPort
-          });
-          
-          if (result.error) {
-            addLogEntry('error', `Deploy failed: ${result.error}`);
-            alert(`Deployment failed:\n${result.error}`);
-          } else {
-            addLogEntry('info', `Deploy successful! Agent is running and ready.`);
-            setAgentStatus(editingAgent, 'ready');
-          }
-        } catch (e) {
-          addLogEntry('error', `Deploy exception: ${e.message}`);
-          alert(`Deployment exception:\n${e.message}`);
-        }
-        
-        saveConfigBtn.disabled = false;
-        saveConfigBtn.textContent = 'COMMIT & DEPLOY';
-        configModal.style.display = 'none';
-      }
-    } else {
-      configModal.style.display = 'none';
-      addLogEntry('info', `${editingAgent === 'client' ? 'Client' : 'Server'} configuration updated`);
-    }
+    configModal.style.display = 'none';
+    addLogEntry('info', `${editingAgent === 'client' ? 'Client' : 'Server'} configuration updated`);
   };
 
   clientConfigBtn.addEventListener('click', () => openConfigModal('client'));
@@ -868,12 +806,12 @@
         serverScenarios: serverScenarios.length > 0 ? serverScenarios : null,
         clientConfig: {
           host: clientAgentConfig.datapathHost,
-          port: clientAgentConfig.datapathPort,
+          port: defaultPort,
           delay, timeout, protocol: activeProtocol, dut
         },
         serverConfig: {
           hostname: serverAgentConfig.datapathHost,
-          port: serverAgentConfig.datapathPort,
+          port: defaultPort,
           delay, timeout, protocol: activeProtocol, dut
         },
       });
