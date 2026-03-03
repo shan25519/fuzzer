@@ -121,7 +121,8 @@
     if (distributedMode) {
       // In distributed mode, show all scenarios (both sides)
       modeSelect.disabled = true;
-      hostGroup.style.display = 'none';
+      // Keep hostGroup visible and enabled so user can specify target for client agent
+      hostGroup.style.display = 'flex';
       localModeCheck.checked = false;
       localModeCheck.disabled = true;
       localMode = false;
@@ -527,6 +528,7 @@
 
     // Show all TLS scenarios (client + server sides)
     for (const [cat, label] of Object.entries(categories)) {
+      if (cat === 'Z') continue;
       const items = allScenarios[cat] || [];
       if (items.length === 0) continue;
 
@@ -761,6 +763,37 @@
     const delay = parseInt(delayInput.value, 10) || 100;
     const timeout = parseInt(timeoutInput.value, 10) || 5000;
 
+    // In distributed mode, we coordinate the two agents to ensure every test
+    // has a compliant partner. We run in two phases if both sides are selected.
+    const clientScenariosFinal = [];
+    const serverScenariosFinal = [];
+
+    if (clientScenarios.length > 0 && serverScenarios.length === 0) {
+      // Phase: Client Fuzzing only
+      clientScenariosFinal.push(...clientScenarios);
+      for (let i = 0; i < clientScenarios.length; i++) {
+        serverScenariosFinal.push('well-behaved-server');
+      }
+    } else if (serverScenarios.length > 0 && clientScenarios.length === 0) {
+      // Phase: Server Fuzzing only
+      serverScenariosFinal.push(...serverScenarios);
+      for (let i = 0; i < serverScenarios.length; i++) {
+        clientScenariosFinal.push('well-behaved-client');
+      }
+    } else if (clientScenarios.length > 0 && serverScenarios.length > 0) {
+      // Combined Phase: Client Fuzzing followed by Server Fuzzing
+      // 1. Client Fuzzing Batch
+      clientScenariosFinal.push(...clientScenarios);
+      for (let i = 0; i < clientScenarios.length; i++) {
+        serverScenariosFinal.push('well-behaved-server');
+      }
+      // 2. Server Fuzzing Batch
+      serverScenariosFinal.push(...serverScenarios);
+      for (let i = 0; i < serverScenarios.length; i++) {
+        clientScenariosFinal.push('well-behaved-client');
+      }
+    }
+
     const dut = dutCheck.checked ? {
       ip: dutIpInput.value.trim(),
       authType: dutAuthType.value,
@@ -790,10 +823,10 @@
 
     try {
       const configResult = await window.fuzzer.distributedConfigure({
-        clientScenarios: clientScenarios.length > 0 ? clientScenarios : null,
-        serverScenarios: serverScenarios.length > 0 ? serverScenarios : null,
+        clientScenarios: clientScenariosFinal.length > 0 ? clientScenariosFinal : null,
+        serverScenarios: serverScenariosFinal.length > 0 ? serverScenariosFinal : null,
         clientConfig: { host, port, delay, timeout, protocol: activeProtocol, dut },
-        serverConfig: { hostname: host, port: parseInt(portInput.value, 10) || 4433, delay, timeout, protocol: activeProtocol, dut },
+        serverConfig: { hostname: host, port, delay, timeout, protocol: activeProtocol, dut },
       });
 
       if (configResult.error) {
@@ -814,7 +847,7 @@
     }
 
     // Subscribe to events
-    let agentsDone = { client: !clientScenarios.length, server: !serverScenarios.length };
+    let agentsDone = { client: !clientScenariosFinal.length, server: !serverScenariosFinal.length };
 
     unsubPacket = window.fuzzer.onPacket((evt) => {
       const roleTag = evt.agentRole ? `[${evt.agentRole}] ` : '';
@@ -888,6 +921,9 @@
 
   // Handle incoming packet events from the fuzzer
   function handlePacketEvent(evt, rolePrefix) {
+    if (distributedMode && evt.agentRole) {
+      modeSelect.value = evt.agentRole;
+    }
     const p = rolePrefix || '';
     switch (evt.type) {
       case 'scenario':
@@ -990,6 +1026,9 @@
   }
 
   function handleResult(result) {
+    if (distributedMode && result.agentRole) {
+      modeSelect.value = result.agentRole;
+    }
     const meta = findScenarioMeta(result.scenario);
     const expected = meta ? meta.expected : null;
     const expectedReason = meta ? meta.expectedReason : '';
@@ -1028,6 +1067,9 @@
   }
 
   function handleProgress(prog) {
+    if (distributedMode && prog.agentRole) {
+      modeSelect.value = prog.agentRole;
+    }
     const pct = Math.round((prog.current / prog.total) * 100);
     progressBar.style.width = pct + '%';
     progressText.textContent = `${prog.current} / ${prog.total}: ${prog.scenario}`;
