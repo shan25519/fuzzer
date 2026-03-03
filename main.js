@@ -320,211 +320,62 @@ const send = (channel, data) => {
   }
 };
 
-// Deploy agent via SSH with dependency checks, sudo, and comprehensive reporting
+// Deploy agent via SSH
 ipcMain.handle('deploy-agent', async (_event, opts) => {
   const { role, host, user, path: remotePath, mgmtPort } = opts;
   const { exec } = require('child_process');
   const util = require('util');
   const execAsync = util.promisify(exec);
-  const http = require('http');
 
-  const sshOpts = '-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10';
-  const ssh = (cmd) => execAsync(`ssh ${sshOpts} ${user}@${host} ${JSON.stringify(cmd)}`, { timeout: 120000 });
-  const steps = [];
-
-  const addStep = (name, status, detail) => { steps.push({ name, status, detail }); };
-
-  // --- Step 1: SSH connectivity ---
   try {
-    await ssh('echo ok');
-    addStep('SSH connectivity', 'ok', `Connected to ${user}@${host}`);
-  } catch (err) {
-    addStep('SSH connectivity', 'failed', err.message);
-    return { ok: false, steps, error: `SSH connection failed: ${err.message}` };
-  }
-
-  // --- Step 2: OS detection ---
-  let pkgManager = null;
-  try {
-    const { stdout } = await ssh('cat /etc/os-release 2>/dev/null || echo "Unknown"');
-    const osName = (stdout.match(/PRETTY_NAME="([^"]+)"/) || [])[1] || stdout.trim().split('\n')[0];
-
-    // Detect package manager
-    const { stdout: whichResult } = await ssh(
-      'command -v apt-get 2>/dev/null && echo apt || ' +
-      'command -v dnf 2>/dev/null && echo dnf || ' +
-      'command -v yum 2>/dev/null && echo yum || ' +
-      'command -v apk 2>/dev/null && echo apk || ' +
-      'command -v brew 2>/dev/null && echo brew || echo none'
-    );
-    const lines = whichResult.trim().split('\n');
-    pkgManager = lines[lines.length - 1].trim();
-    addStep('OS detection', 'ok', `${osName} (package manager: ${pkgManager})`);
-  } catch (err) {
-    addStep('OS detection', 'warning', `Could not detect OS: ${err.message}`);
-  }
-
-  // --- Step 3: Check / install Node.js ---
-  let nodeOk = false;
-  try {
-    const { stdout } = await ssh('node --version 2>/dev/null');
-    const ver = stdout.trim();
-    const major = parseInt((ver.match(/v(\d+)/) || [])[1], 10);
-    if (major >= 18) {
-      addStep('Node.js', 'ok', `${ver} (already installed)`);
-      nodeOk = true;
-    } else {
-      addStep('Node.js', 'outdated', `${ver} found — need v18+, attempting upgrade`);
-    }
-  } catch {
-    addStep('Node.js', 'missing', 'Not found — attempting install');
-  }
-
-  if (!nodeOk) {
-    try {
-      let installCmd;
-      if (pkgManager === 'apt') {
-        // Use NodeSource for v20 LTS on Debian/Ubuntu
-        installCmd =
-          'sudo apt-get update -y && ' +
-          'sudo apt-get install -y ca-certificates curl gnupg && ' +
-          'sudo mkdir -p /etc/apt/keyrings && ' +
-          'curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && ' +
-          'sudo apt-get install -y nodejs';
-      } else if (pkgManager === 'dnf') {
-        installCmd = 'curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo -E bash - && sudo dnf install -y nodejs';
-      } else if (pkgManager === 'yum') {
-        installCmd = 'curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo -E bash - && sudo yum install -y nodejs';
-      } else if (pkgManager === 'apk') {
-        installCmd = 'sudo apk add --no-cache nodejs npm';
-      } else if (pkgManager === 'brew') {
-        installCmd = 'brew install node@20';
-      } else {
-        addStep('Node.js install', 'failed', 'No supported package manager found — install Node.js 18+ manually');
-        return { ok: false, steps, error: 'Cannot auto-install Node.js: no supported package manager' };
-      }
-      await ssh(installCmd);
-      const { stdout: newVer } = await ssh('node --version');
-      addStep('Node.js install', 'installed', `Installed ${newVer.trim()} via ${pkgManager}`);
-      nodeOk = true;
-    } catch (err) {
-      addStep('Node.js install', 'failed', err.message);
-      return { ok: false, steps, error: 'Failed to install Node.js' };
-    }
-  }
-
-  // --- Step 4: Check / install npm ---
-  try {
-    const { stdout } = await ssh('npm --version 2>/dev/null');
-    addStep('npm', 'ok', `v${stdout.trim()} (already installed)`);
-  } catch {
-    try {
-      if (pkgManager === 'apt') {
-        await ssh('sudo apt-get install -y npm');
-      } else if (pkgManager === 'dnf' || pkgManager === 'yum') {
-        await ssh(`sudo ${pkgManager} install -y npm`);
-      } else if (pkgManager === 'apk') {
-        await ssh('sudo apk add --no-cache npm');
-      }
-      // brew and nodesource bundles npm with node
-      const { stdout: npmVer } = await ssh('npm --version');
-      addStep('npm', 'installed', `Installed v${npmVer.trim()}`);
-    } catch (err) {
-      addStep('npm', 'warning', `Could not install npm: ${err.message} — agent may still work if no deps needed`);
-    }
-  }
-
-  // --- Step 5: Create remote directory (sudo for privileged paths) ---
-  try {
-    await ssh(`sudo mkdir -p ${remotePath} && sudo chown ${user}:${user} ${remotePath}`);
-    addStep('Create directory', 'ok', remotePath);
-  } catch (err) {
-    addStep('Create directory', 'failed', err.message);
-    return { ok: false, steps, error: `Failed to create directory: ${err.message}` };
-  }
-
-  // --- Step 6: Copy files ---
-  try {
+    // 1. Create directory
+    await execAsync(`ssh -o StrictHostKeyChecking=accept-new ${user}@${host} "mkdir -p ${remotePath}"`);
+    
+    // 2. Copy files
     const srcFiles = [
       path.join(__dirname, 'client.js'),
       path.join(__dirname, 'server.js'),
-      path.join(__dirname, 'cli.js'),
-      path.join(__dirname, 'package.json'),
       path.join(__dirname, 'lib')
     ].join(' ');
-    await execAsync(`scp ${sshOpts} -r ${srcFiles} ${user}@${host}:${remotePath}/`, { timeout: 120000 });
-    addStep('Copy files', 'ok', 'Transferred client.js, server.js, cli.js, package.json, lib/');
-  } catch (err) {
-    addStep('Copy files', 'failed', err.message);
-    return { ok: false, steps, error: `SCP failed: ${err.message}` };
-  }
-
-  // --- Step 7: Install npm dependencies ---
-  try {
-    const { stdout } = await ssh(`cd ${remotePath} && npm install --production 2>&1 | tail -3`);
-    addStep('Install dependencies', 'ok', `npm install completed${stdout.trim() ? ' — ' + stdout.trim().split('\n').pop() : ''}`);
-  } catch (err) {
-    addStep('Install dependencies', 'warning', `npm install issue: ${err.message} — agent may still work`);
-  }
-
-  // --- Step 8: Kill old agent ---
-  try {
-    const { stdout } = await ssh(`sudo pkill -f 'node ${role}.js' 2>/dev/null && echo killed || echo none`);
-    addStep('Stop old agent', 'ok', stdout.trim() === 'killed' ? 'Previous process terminated' : 'No previous process found');
-  } catch {
-    addStep('Stop old agent', 'ok', 'No previous process found');
-  }
-
-  // --- Step 9: Open firewall port (best-effort) ---
-  try {
-    const { stdout } = await ssh(
-      `sudo ufw allow ${mgmtPort}/tcp 2>/dev/null && echo ufw || ` +
-      `(sudo firewall-cmd --add-port=${mgmtPort}/tcp --permanent 2>/dev/null && sudo firewall-cmd --reload 2>/dev/null && echo firewalld) || ` +
-      `echo none`
-    );
-    const fw = stdout.trim().split('\n').pop().trim();
-    if (fw === 'ufw') addStep('Firewall port', 'ok', `Opened port ${mgmtPort}/tcp via ufw`);
-    else if (fw === 'firewalld') addStep('Firewall port', 'ok', `Opened port ${mgmtPort}/tcp via firewalld`);
-    else addStep('Firewall port', 'skipped', 'No supported firewall manager found (ufw/firewalld)');
-  } catch {
-    addStep('Firewall port', 'skipped', 'Could not configure firewall — may need manual setup');
-  }
-
-  // --- Step 10: Start agent ---
-  try {
-    await ssh(`cd ${remotePath} && nohup node ${role}.js --agent --control-port ${mgmtPort} > ${role}.log 2>&1 &`);
-    addStep('Start agent', 'ok', `Started ${role}.js --agent --control-port ${mgmtPort}`);
-  } catch (err) {
-    addStep('Start agent', 'failed', err.message);
-    return { ok: false, steps, error: `Failed to start agent: ${err.message}` };
-  }
-
-  // --- Step 11: Poll for readiness ---
-  const maxRetries = 15;
-  const retryDelay = 2000;
-  const startTime = Date.now();
-
-  const checkStatus = () => new Promise((resolve) => {
-    const req = http.get(`http://${host}:${mgmtPort}/status`, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data.includes(role)));
+    
+    await execAsync(`scp -o StrictHostKeyChecking=accept-new -r ${srcFiles} ${user}@${host}:${remotePath}/`);
+    
+    // 3. Start agent
+    const cmd = `ssh -o StrictHostKeyChecking=accept-new ${user}@${host} "cd ${remotePath} && pkill -f 'node ${role}.js' || true && nohup node ${role}.js --control-port ${mgmtPort} > ${role}.log 2>&1 &"`;
+    await execAsync(cmd);
+    
+    // 4. Poll for readiness
+    const maxRetries = 15;
+    const retryDelay = 2000;
+    const http = require('http');
+    
+    const checkStatus = () => new Promise((resolve) => {
+      const req = http.get(`http://${host}:${mgmtPort}/status`, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          resolve(data.includes(role));
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.setTimeout(1000, () => {
+        req.destroy();
+        resolve(false);
+      });
     });
-    req.on('error', () => resolve(false));
-    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
-  });
 
-  for (let i = 0; i < maxRetries; i++) {
-    await new Promise(r => setTimeout(r, retryDelay));
-    if (await checkStatus()) {
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      addStep('Agent readiness', 'ok', `Agent responded after ${elapsed}s`);
-      return { ok: true, steps };
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise(r => setTimeout(r, retryDelay));
+      if (await checkStatus()) {
+        return { ok: true };
+      }
     }
-  }
+    
+    return { error: 'Agent failed to start or is unreachable after deployment.' };
 
-  addStep('Agent readiness', 'failed', `Agent did not respond after ${maxRetries * retryDelay / 1000}s — check ${role}.log on remote host`);
-  return { ok: false, steps, error: 'Agent failed to start or is unreachable after deployment' };
+  } catch (err) {
+    return { error: err.message || 'Unknown deployment error' };
+  }
 });
 
 // Connect to remote agents
