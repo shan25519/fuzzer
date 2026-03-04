@@ -34,6 +34,8 @@
   const localModeCheck = document.getElementById('localModeCheck');
   const distributedCheck = document.getElementById('distributedCheck');
   const distributedBar = document.getElementById('distributedBar');
+  const clientAgentIp = document.getElementById('clientAgentIp');
+  const serverAgentIp = document.getElementById('serverAgentIp');
   const clientStatusDot = document.getElementById('clientStatusDot');
   const clientStatusText = document.getElementById('clientStatusText');
   const serverStatusDot = document.getElementById('serverStatusDot');
@@ -161,23 +163,26 @@
   disconnectBtn.addEventListener('click', handleDisconnect);
 
   async function handleConnect() {
+    const cHost = clientAgentIp.value.trim() || 'localhost';
+    const sHost = serverAgentIp.value.trim() || 'localhost';
+
     setAgentStatus('client', 'connecting');
     setAgentStatus('server', 'connecting');
     connectBtn.disabled = true;
 
     try {
       const result = await window.fuzzer.distributedConnect({
-        clientHost: 'localhost',
+        clientHost: cHost,
         clientPort: '9100',
         clientToken: null,
-        serverHost: 'localhost',
+        serverHost: sHost,
         serverPort: '9101',
         serverToken: null,
       });
 
       if (result.client) {
         setAgentStatus('client', result.client.status || 'idle');
-        addLogEntry('info', `Client agent connected: localhost:9100 (${result.client.status})`);
+        addLogEntry('info', `Client agent connected: ${cHost}:9100 (${result.client.status})`);
       } else if (result.clientError) {
         setAgentStatus('client', 'error');
         addLogEntry('error', `Client agent: ${result.clientError}`);
@@ -185,7 +190,7 @@
 
       if (result.server) {
         setAgentStatus('server', result.server.status || 'idle');
-        addLogEntry('info', `Server agent connected: localhost:9101 (${result.server.status})`);
+        addLogEntry('info', `Server agent connected: ${sHost}:9101 (${result.server.status})`);
       } else if (result.serverError) {
         setAgentStatus('server', 'error');
         addLogEntry('error', `Server agent: ${result.serverError}`);
@@ -195,6 +200,8 @@
       if (anyConnected) {
         agentsConnected = true;
         disconnectBtn.disabled = false;
+        clientAgentIp.disabled = true;
+        serverAgentIp.disabled = true;
         startStatusPolling();
       } else {
         connectBtn.disabled = false;
@@ -217,6 +224,8 @@
     setAgentStatus('server', 'idle');
     connectBtn.disabled = false;
     disconnectBtn.disabled = true;
+    clientAgentIp.disabled = false;
+    serverAgentIp.disabled = false;
     addLogEntry('info', 'Disconnected from agents');
   }
 

@@ -781,6 +781,22 @@ body {
   white-space: nowrap;
 }
 
+.agent-ip-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  width: 120px;
+}
+
+.agent-ip-input:focus {
+  border-color: var(--accent);
+}
+
 .agent-status-dot {
   width: 8px;
   height: 8px;
