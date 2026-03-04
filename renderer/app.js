@@ -82,6 +82,7 @@
   let localMode = false;
   let distributedMode = false;
   let agentsConnected = false;
+  let connectedAgents = { client: false, server: false };
   let unsubAgentDone = null;
   let unsubAgentStatus = null;
   let statusPollTimer = null;
@@ -163,8 +164,8 @@
   disconnectBtn.addEventListener('click', handleDisconnect);
 
   async function handleConnect() {
-    const cHost = clientAgentIp.value.trim() || 'localhost';
-    const sHost = serverAgentIp.value.trim() || 'localhost';
+    const cHost = clientAgentIp.value.trim() || '127.0.0.1';
+    const sHost = serverAgentIp.value.trim() || '127.0.0.1';
 
     setAgentStatus('client', 'connecting');
     setAgentStatus('server', 'connecting');
@@ -173,25 +174,29 @@
     try {
       const result = await window.fuzzer.distributedConnect({
         clientHost: cHost,
-        clientPort: '9100',
+        clientPort: '9200',
         clientToken: null,
         serverHost: sHost,
-        serverPort: '9101',
+        serverPort: '9201',
         serverToken: null,
       });
 
       if (result.client) {
+        connectedAgents.client = true;
         setAgentStatus('client', result.client.status || 'idle');
-        addLogEntry('info', `Client agent connected: ${cHost}:9100 (${result.client.status})`);
+        addLogEntry('info', `Client agent connected: ${cHost}:9200 (${result.client.status})`);
       } else if (result.clientError) {
+        connectedAgents.client = false;
         setAgentStatus('client', 'error');
         addLogEntry('error', `Client agent: ${result.clientError}`);
       }
 
       if (result.server) {
+        connectedAgents.server = true;
         setAgentStatus('server', result.server.status || 'idle');
-        addLogEntry('info', `Server agent connected: ${sHost}:9101 (${result.server.status})`);
+        addLogEntry('info', `Server agent connected: ${sHost}:9201 (${result.server.status})`);
       } else if (result.serverError) {
+        connectedAgents.server = false;
         setAgentStatus('server', 'error');
         addLogEntry('error', `Server agent: ${result.serverError}`);
       }
@@ -220,6 +225,7 @@
       await window.fuzzer.distributedDisconnect();
     } catch (_) {}
     agentsConnected = false;
+    connectedAgents = { client: false, server: false };
     setAgentStatus('client', 'idle');
     setAgentStatus('server', 'idle');
     connectBtn.disabled = false;
@@ -733,6 +739,18 @@
       return;
     }
 
+    // Validate that required agents are connected
+    const needClient = clientScenarios.length > 0 || serverScenarios.length > 0;
+    const needServer = serverScenarios.length > 0 || clientScenarios.length > 0;
+    if (needClient && !connectedAgents.client) {
+      addLogEntry('error', 'Client agent is not connected — reconnect before running');
+      return;
+    }
+    if (needServer && !connectedAgents.server) {
+      addLogEntry('error', 'Server agent is not connected — reconnect before running');
+      return;
+    }
+
     const host = hostInput.value.trim() || 'localhost';
     const port = parseInt(portInput.value, 10) || 443;
     const delay = parseInt(delayInput.value, 10) || 100;
@@ -811,9 +829,14 @@
         return;
       }
 
-      addLogEntry('info', 'Agents configured — both ready');
-      setAgentStatus('client', 'ready');
-      setAgentStatus('server', 'ready');
+      if (connectedAgents.client) {
+        setAgentStatus('client', 'ready');
+        addLogEntry('info', 'Client agent configured — ready');
+      }
+      if (connectedAgents.server) {
+        setAgentStatus('server', 'ready');
+        addLogEntry('info', 'Server agent configured — ready');
+      }
     } catch (err) {
       addLogEntry('error', `Configure failed: ${err.message || err}`);
       setRunning(false);

@@ -13,11 +13,11 @@ const USAGE = `
   client-side fuzzing scenarios directly against a target TLS server.
 
   Usage:
-    node client.js                          Start client agent (control on 0.0.0.0:9100)
+    node client.js                          Start client agent (control on 0.0.0.0:9200)
     node client.js <host> <port> [options]  Run scenarios directly
 
   Agent options:
-    --control-port <port>   Agent control port (default: 9100)
+    --control-port <port>   Agent control port (default: 9200)
     --token <string>        Authentication token for agent mode
 
   Direct-run options:
@@ -61,7 +61,7 @@ async function main() {
 
   // Agent mode — no host/port args means start the control channel
   if (!host || !port) {
-    const controlPort = parseInt(args['control-port']) || 9100;
+    const controlPort = parseInt(args['control-port']) || 9200;
     const token = args['token'] || null;
     const { startAgent } = require('./lib/agent');
     startAgent('client', { controlPort, token });

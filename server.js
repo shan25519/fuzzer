@@ -15,11 +15,11 @@ const USAGE = `
   connections and responds with fuzzed TLS handshake messages.
 
   Usage:
-    node server.js                    Start server agent (control on 0.0.0.0:9101)
+    node server.js                    Start server agent (control on 0.0.0.0:9201)
     node server.js <port> [options]   Run scenarios directly
 
   Agent options:
-    --control-port <port>   Agent control port (default: 9101)
+    --control-port <port>   Agent control port (default: 9201)
     --token <string>        Authentication token for agent mode
 
   Direct-run options:
@@ -63,7 +63,7 @@ async function main() {
 
   // Agent mode — no port arg means start the control channel
   if (!port) {
-    const controlPort = parseInt(args['control-port']) || 9101;
+    const controlPort = parseInt(args['control-port']) || 9201;
     const token = args['token'] || null;
     const { startAgent } = require('./lib/agent');
     startAgent('server', { controlPort, token });

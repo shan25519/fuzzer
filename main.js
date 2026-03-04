@@ -431,23 +431,32 @@ const send = (channel, data) => {
 // Connect to remote agents
 ipcMain.handle('distributed-connect', async (_event, opts) => {
   const { clientHost, clientPort, clientToken, serverHost, serverPort, serverToken } = opts;
+
+  // Clean up previous controller if any
+  if (controller) {
+    controller.disconnect();
+  }
   controller = new Controller();
 
   const result = {};
+  const promises = [];
+
   if (clientHost && clientPort) {
-    try {
-      result.client = await controller.connect('client', clientHost, parseInt(clientPort), clientToken);
-    } catch (err) {
-      result.clientError = err.message;
-    }
+    promises.push(
+      controller.connect('client', clientHost, parseInt(clientPort), clientToken)
+        .then(status => { result.client = status; })
+        .catch(err => { result.clientError = err.message; })
+    );
   }
   if (serverHost && serverPort) {
-    try {
-      result.server = await controller.connect('server', serverHost, parseInt(serverPort), serverToken);
-    } catch (err) {
-      result.serverError = err.message;
-    }
+    promises.push(
+      controller.connect('server', serverHost, parseInt(serverPort), serverToken)
+        .then(status => { result.server = status; })
+        .catch(err => { result.serverError = err.message; })
+    );
   }
+
+  await Promise.all(promises);
   return result;
 });
 
@@ -456,8 +465,11 @@ ipcMain.handle('distributed-configure', async (_event, opts) => {
   if (!controller) return { error: 'Not connected' };
   const { clientScenarios, serverScenarios, clientConfig, serverConfig } = opts;
   try {
-    await controller.configureAll(clientScenarios, serverScenarios, clientConfig, serverConfig);
-    return { ok: true };
+    const configured = await controller.configureAll(clientScenarios, serverScenarios, clientConfig, serverConfig);
+    if (!configured.client && !configured.server) {
+      return { error: 'No agents were configured — check connections' };
+    }
+    return { ok: true, configured };
   } catch (err) {
     return { error: err.message };
   }
