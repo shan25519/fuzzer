@@ -1178,13 +1178,13 @@
     const htTitle = ht.alive
       ? `HTTPS ${ht.statusCode} | ${ht.tlsVersion} | ${ht.cipher} | ${ht.latency}ms`
       : `HTTPS failed: ${ht.error}`;
-    return `<span class="probe-badge ${tcpCls}" title="${escapeHtml(tcpTitle)}">TCP ${tcpLabel}</span>` +
-           `<span class="probe-badge ${htCls}" title="${escapeHtml(htTitle)}">HTTPS ${htLabel}</span>`;
+    return `<span class="probe-badge ${tcpCls}" title="${_escHtml(tcpTitle)}">TCP ${tcpLabel}</span>` +
+           `<span class="probe-badge ${htCls}" title="${_escHtml(htTitle)}">HTTPS ${htLabel}</span>`;
   }
 
   function renderFindingCell(finding) {
     if (!finding) return '<span class="finding-badge finding-INFO">—</span>';
-    const title = finding.reason ? escapeHtml(finding.reason) : '';
+    const title = finding.reason ? _escHtml(finding.reason) : '';
     const sevHtml = finding.severity
       ? `<span class="severity-badge sev-${finding.severity}">${finding.severity}</span>`
       : '';
@@ -1209,6 +1209,7 @@
     const scenario = result.scenario || '?';
     const status = result.status || '?';
     const response = result.response || '';
+    const baseline = result.baselineResponse || 'N/A';
     const cat = meta ? meta.category : '?';
     const hostDown = result.hostDown || false;
 
@@ -1219,13 +1220,14 @@
     const findingHtml = renderFindingCell(result.finding);
     tr.innerHTML = `
       <td class="num">${idx}</td>
-      <td>${escapeHtml(scenario)}</td>
-      <td>${escapeHtml(cat)}</td>
+      <td>${_escHtml(scenario)}</td>
+      <td>${_escHtml(cat)}</td>
       <td><span class="status-badge status-${status}">${status}</span>${downBadge}</td>
+      <td style="font-size: 11px; color: var(--text-secondary);">${_escHtml(baseline)}</td>
       <td>${healthHtml}</td>
       <td>${findingHtml}</td>
-      <td><span class="verdict-badge verdict-${verdictCls}" title="${escapeHtml(verdictTitle)}">${verdict}</span></td>
-      <td>${escapeHtml(response)}</td>
+      <td><span class="verdict-badge verdict-${verdictCls}" title="${_escHtml(verdictTitle)}">${verdict}</span></td>
+      <td>${_escHtml(response)}</td>
     `;
     resultsBody.appendChild(tr);
     tr.scrollIntoView({ block: 'nearest' });
@@ -1297,7 +1299,7 @@
       const r = lastReport;
       gradeBannerHtml = `
         <span class="grade-badge grade-${r.grade}">${r.grade}</span>
-        <span class="grade-label">${escapeHtml(r.label)}</span>
+        <span class="grade-label">${_escHtml(r.label)}</span>
         <span class="grade-stats">
           <span class="g-pass">PASS: ${r.stats.pass}</span>
           <span class="g-fail">FAIL: ${r.stats.fail}</span>
@@ -1446,7 +1448,7 @@
   });
 
   // Utility
-  function escapeHtml(str) {
+  function _escHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;

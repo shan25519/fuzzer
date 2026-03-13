@@ -482,7 +482,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 120px;
+  min-height: 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -494,6 +494,7 @@ body {
 .results-table-wrap {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .results-table {
@@ -626,7 +627,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 120px;
+  min-height: 0;
 }
 
 .packet-log {
@@ -636,6 +637,7 @@ body {
   font-size: 11px;
   line-height: 1.6;
   background: var(--bg-primary);
+  min-height: 0;
 }
 
 .log-empty {

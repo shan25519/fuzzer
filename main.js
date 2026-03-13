@@ -251,12 +251,9 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
       for (const scenario of scenarios) {
         if (activeClient.aborted) break;
         send('fuzzer-progress', { scenario: scenario.name, total: totalWithLoops, current: results.length + 1 });
-        
-        const baselineRes = await runBaseline(scenario, protocol);
+
         const result = await activeClient.runScenario(scenario);
-        result.baselineResponse = baselineRes.response;
-        result.baselineCommand = baselineRes.command;
-        
+
         results.push(result);
         send('fuzzer-result', result);
         await new Promise(r => setTimeout(r, 300));
