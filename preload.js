@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('fuzzer', {
   run: (opts) => ipcRenderer.invoke('run-fuzzer', opts),
   stop: () => ipcRenderer.invoke('stop-fuzzer'),
   savePcapDialog: () => ipcRenderer.invoke('save-pcap-dialog'),
+  saveLogToFile: (path, content) => ipcRenderer.invoke('save-log-to-file', path, content),
   onPacket: (cb) => {
     const listener = (_e, data) => cb(data);
     ipcRenderer.on('fuzzer-packet', listener);

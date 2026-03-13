@@ -25,6 +25,8 @@
   const resultsBody = document.getElementById('resultsBody');
   const resultsEmpty = document.getElementById('resultsEmpty');
   const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const logToFileBtn = document.getElementById('logToFileBtn');
+  const logPathInput = document.getElementById('logPathInput');
   const clearResultsBtn = document.getElementById('clearResultsBtn');
   const packetLog = document.getElementById('packetLog');
   const clearLogBtn = document.getElementById('clearLogBtn');
@@ -1228,6 +1230,7 @@
     resultsBody.appendChild(tr);
     tr.scrollIntoView({ block: 'nearest' });
     exportJsonBtn.disabled = false;
+    logToFileBtn.disabled = false;
   }
 
   function handleProgress(prog) {
@@ -1359,6 +1362,71 @@
     URL.revokeObjectURL(url);
   });
 
+  logToFileBtn.addEventListener('click', async () => {
+    if (results.length === 0) return;
+    const filePath = logPathInput.value.trim();
+    if (!filePath) {
+      alert('Please enter a valid file path in the input box to the left of the button.');
+      return;
+    }
+    
+    const isVerbose = verboseCheck.checked;
+    let logContent = `--- Protocol Fuzzer Run Log: ${new Date().toISOString()} ---\n`;
+    logContent += `--- Verbose Mode: ${isVerbose ? 'ON' : 'OFF'} ---\n\n`;
+
+    for (const r of results) {
+      const meta = findScenarioMeta(r.scenario);
+      logContent += `==========================================================\n`;
+      logContent += `Scenario: ${r.scenario}\n`;
+      logContent += `Category: ${meta ? meta.category : 'Unknown'}\n`;
+      logContent += `Description: ${meta ? meta.description : 'N/A'}\n`;
+      logContent += `Status: ${r.status}\n`;
+      logContent += `Verdict: ${r.verdict}\n`;
+      logContent += `Target Response: ${r.response}\n`;
+      
+      if (r.baselineCommand) {
+        logContent += `\n[OpenSSL Baseline Check]\n`;
+        logContent += `Command: ${r.baselineCommand}\n`;
+        logContent += `Response: ${r.baselineResponse}\n`;
+        const match = r.response === r.baselineResponse ? 'YES' : 'NO';
+        logContent += `Matches Baseline: ${match}\n`;
+      }
+
+      if (isVerbose && r.packets && r.packets.length > 0) {
+        logContent += `\n[Packet Trace]\n`;
+        for (const p of r.packets) {
+          const dir = (p.type === 'sent' || (p.type === 'tcp' && p.direction === 'sent')) ? '→' : '←';
+          logContent += `${p.ts} ${dir} ${p.label || p.flag || p.type} (${p.size || 0} bytes)\n`;
+          if (p.hex) {
+            // Simple hex dump formatter for the text log
+            const hex = p.hex;
+            for (let i = 0; i < hex.length; i += 32) {
+              const chunk = hex.substr(i, 32);
+              let line = `    ${(i/2).toString(16).padStart(8, '0')}  `;
+              for (let j = 0; j < chunk.length; j += 2) {
+                line += chunk.substr(j, 2) + ' ';
+                if (j === 14) line += ' ';
+              }
+              logContent += line + '\n';
+            }
+          }
+        }
+      }
+      logContent += `\n\n`;
+    }
+
+    try {
+      const res = await window.fuzzer.saveLogToFile(filePath, logContent);
+      if (res.success) {
+        alert('Log successfully appended to ' + filePath);
+      } else {
+        alert('Failed to save log: ' + res.error);
+      }
+    } catch (err) {
+      alert('Failed to save log: ' + err.message);
+    }
+  });
+
   // Clear buttons
   clearResultsBtn.addEventListener('click', () => {
     results = [];
@@ -1367,6 +1435,7 @@
     resultsEmpty.style.display = 'block';
     resultsTable.style.display = 'table';
     exportJsonBtn.disabled = true;
+    logToFileBtn.disabled = true;
     summaryBar.style.display = 'none';
     statusBadge.textContent = 'IDLE';
     statusBadge.className = 'header-status';

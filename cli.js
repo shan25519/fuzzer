@@ -6,6 +6,7 @@ const { FuzzerServer } = require('./lib/fuzzer-server');
 const { UnifiedClient } = require('./lib/unified-client');
 const { UnifiedServer } = require('./lib/unified-server');
 const { Logger } = require('./lib/logger');
+const { runBaseline } = require('./lib/baseline');
 const { listScenarios, getScenario, getScenariosByCategory, getClientScenarios, getServerScenarios, CATEGORY_DEFAULT_DISABLED } = require('./lib/scenarios');
 const { listHttp2Scenarios, getHttp2Scenario, getHttp2ScenariosByCategory, listHttp2ClientScenarios, listHttp2ServerScenarios } = require('./lib/http2-scenarios');
 const { listQuicScenarios, getQuicScenario, getQuicScenariosByCategory, listQuicClientScenarios, listQuicServerScenarios } = require('./lib/quic-scenarios');
@@ -198,6 +199,28 @@ async function main() {
       ? new UnifiedClient({ host, port, timeout, delay, logger, pcapFile })
       : new FuzzerClient({ host, port, timeout, delay, logger, pcapFile });
 
+    const originalRunScenario = client.runScenario.bind(client);
+    client.runScenario = async (scenario) => {
+      if (!logger.json) console.log(`\x1b[90m    [baseline] testing against local OpenSSL...\x1b[0m`);
+      const baselineRes = await runBaseline(scenario, protocol);
+      scenario._baselineResponse = baselineRes.response;
+      return originalRunScenario(scenario);
+    };
+
+    const originalResult = logger.result.bind(logger);
+    logger.result = (scenarioName, status, response, verdict, expectedReason, hostDown, finding, compliance) => {
+      const s = scenarios.find(x => x.name === scenarioName);
+      const baselineResponse = s ? s._baselineResponse : null;
+      if (!logger.json && baselineResponse) {
+        if (baselineResponse === response) {
+          console.log(`\x1b[32m    ✓ Response matches OpenSSL baseline\x1b[0m`);
+        } else {
+          console.log(`\x1b[33m    ⚠ Differs from OpenSSL! OpenSSL response: ${baselineResponse}\x1b[0m`);
+        }
+      }
+      originalResult(scenarioName, status, response, verdict, expectedReason, hostDown, finding, compliance);
+    };
+
     // Handle ctrl+c
     process.on('SIGINT', () => {
       client.abort();
@@ -292,6 +315,29 @@ async function main() {
           certInfo,
         });
 
+    const originalRunScenario = server.runScenario.bind(server);
+    server.runScenario = async (scenario) => {
+      if (!logger.json) console.log(`\x1b[90m    [baseline] testing against local OpenSSL...\x1b[0m`);
+      const baselineRes = await runBaseline(scenario, protocol);
+      scenario._baselineResponse = baselineRes.response;
+      return originalRunScenario(scenario);
+    };
+
+    const originalResult = logger.result.bind(logger);
+    logger.result = (scenarioName, status, response, verdict, expectedReason, hostDown, finding, compliance) => {
+      const s = scenarios.find(x => x.name === scenarioName);
+      const baselineResponse = s ? s._baselineResponse : null;
+      if (!logger.json && baselineResponse) {
+        if (baselineResponse === response) {
+          console.log(`\x1b[32m    ✓ Response matches OpenSSL baseline\x1b[0m`);
+        } else {
+          console.log(`\x1b[33m    ⚠ Differs from OpenSSL! OpenSSL response: ${baselineResponse}\x1b[0m`);
+        }
+      }
+      originalResult(scenarioName, status, response, verdict, expectedReason, hostDown, finding, compliance);
+    };
+
+    // Handle ctrl+c
     process.on('SIGINT', () => {
       server.abort();
       process.exit(0);

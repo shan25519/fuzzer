@@ -14,6 +14,7 @@ const { isRawAvailable } = require('./lib/raw-tcp');
 const { computeOverallGrade } = require('./lib/grader');
 const { computeExpected } = require('./lib/compute-expected');
 const { Controller } = require('./lib/controller');
+const { runBaseline } = require('./lib/baseline');
 const { WellBehavedServer } = require('./lib/well-behaved-server');
 const { WellBehavedClient } = require('./lib/well-behaved-client');
 
@@ -158,7 +159,13 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
   };
 
   const logger = new Logger({ verbose });
-  logger.onEvent((evt) => send('fuzzer-packet', evt));
+  let currentScenarioPackets = [];
+  logger.onEvent((evt) => {
+    if (['sent', 'received', 'tcp', 'fuzz'].includes(evt.type)) {
+      currentScenarioPackets.push(evt);
+    }
+    send('fuzzer-packet', evt);
+  });
 
   const portNum = parseInt(port, 10);
   if (!portNum || portNum < 1 || portNum > 65535) {
@@ -222,6 +229,20 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
       dut,
     });
 
+    const originalClientRun = activeClient.runScenario.bind(activeClient);
+    activeClient.runScenario = async (scenario) => {
+      currentScenarioPackets = [];
+      send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
+      const baselineRes = await runBaseline(scenario, protocol);
+      scenario._baselineResponse = baselineRes.response;
+      scenario._baselineCommand = baselineRes.command;
+      const result = await originalClientRun(scenario);
+      result.baselineResponse = baselineRes.response;
+      result.baselineCommand = baselineRes.command;
+      result.packets = [...currentScenarioPackets];
+      return result;
+    };
+
     for (let loop = 0; loop < loopCount; loop++) {
       if (activeClient.aborted) break;
       if (loopCount > 1) {
@@ -230,7 +251,12 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
       for (const scenario of scenarios) {
         if (activeClient.aborted) break;
         send('fuzzer-progress', { scenario: scenario.name, total: totalWithLoops, current: results.length + 1 });
+        
+        const baselineRes = await runBaseline(scenario, protocol);
         const result = await activeClient.runScenario(scenario);
+        result.baselineResponse = baselineRes.response;
+        result.baselineCommand = baselineRes.command;
+        
         results.push(result);
         send('fuzzer-result', result);
         await new Promise(r => setTimeout(r, 300));
@@ -273,6 +299,20 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
       logger, pcapFile: pcapFile || null,
       dut,
     });
+
+    const originalServerRun = activeServer.runScenario.bind(activeServer);
+    activeServer.runScenario = async (scenario) => {
+      currentScenarioPackets = [];
+      send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
+      const baselineRes = await runBaseline(scenario, protocol);
+      scenario._baselineResponse = baselineRes.response;
+      scenario._baselineCommand = baselineRes.command;
+      const result = await originalServerRun(scenario);
+      result.baselineResponse = baselineRes.response;
+      result.baselineCommand = baselineRes.command;
+      result.packets = [...currentScenarioPackets];
+      return result;
+    };
 
     const certInfo = activeServer.getCertInfo();
 
@@ -458,6 +498,16 @@ ipcMain.handle('save-pcap-dialog', async () => {
     filters: [{ name: 'PCAP Files', extensions: ['pcap'] }],
   });
   return result.canceled ? null : result.filePath;
+});
+
+// Save Log to specific file path
+ipcMain.handle('save-log-to-file', async (event, filePath, content) => {
+  try {
+    require('fs').appendFileSync(filePath, content + '\n\n');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 });
 
 // --- Distributed Mode IPC Handlers ---
