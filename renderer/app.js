@@ -1198,11 +1198,22 @@
     const meta = findScenarioMeta(result.scenario);
     const expected = meta ? meta.expected : null;
     const expectedReason = meta ? meta.expectedReason : '';
-    const { verdict, cls: verdictCls } = computeVerdict(result.status, expected);
+    
+    // If the backend didn't provide a verdict (older version or error), compute one here
+    let verdict = result.verdict;
+    let verdictCls = 'na';
+    if (!verdict || verdict === 'N/A') {
+      const computed = computeVerdict(result.status, expected);
+      verdict = computed.verdict;
+      verdictCls = computed.cls;
+    } else {
+      verdictCls = verdict === 'AS EXPECTED' ? 'expected' : 'unexpected';
+    }
 
     result.expected = expected;
     result.expectedReason = expectedReason;
-    result.verdict = verdict;
+    // Don't overwrite result.verdict if it came from IPC
+    if (!result.verdict || result.verdict === 'N/A') result.verdict = verdict;
     results.push(result);
 
     const idx = results.length;
