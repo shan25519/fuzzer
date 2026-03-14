@@ -34,6 +34,7 @@
   const summaryText = document.getElementById('summaryText');
   const statusBadge = document.getElementById('statusBadge');
   const localModeCheck = document.getElementById('localModeCheck');
+  const baselineCheck = document.getElementById('baselineCheck');
   const distributedCheck = document.getElementById('distributedCheck');
   const distributedBar = document.getElementById('distributedBar');
   const clientAgentIp = document.getElementById('clientAgentIp');
@@ -858,6 +859,7 @@
         dut,
         loopCount,
         localMode,
+        baseline: baselineCheck.checked,
       });
 
       if (response.error) {

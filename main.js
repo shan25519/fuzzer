@@ -149,7 +149,7 @@ ipcMain.handle('list-scenarios', () => {
 
 // Run fuzzer
 ipcMain.handle('run-fuzzer', async (event, opts) => {
-  const { mode, host, port, scenarioNames, delay, timeout, pcapFile, verbose, hostname, protocol, dut, loopCount: rawLoop, localMode } = opts;
+  const { mode, host, port, scenarioNames, delay, timeout, pcapFile, verbose, hostname, protocol, dut, loopCount: rawLoop, localMode, baseline } = opts;
   const loopCount = Math.max(1, Math.min(1000, parseInt(rawLoop, 10) || 1));
 
   const send = (channel, data) => {
@@ -232,13 +232,18 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
     const originalClientRun = activeClient.runScenario.bind(activeClient);
     activeClient.runScenario = async (scenario) => {
       currentScenarioPackets = [];
-      send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
-      const baselineRes = await runBaseline(scenario, protocol);
-      scenario._baselineResponse = baselineRes.response;
-      scenario._baselineCommand = baselineRes.command;
+      if (baseline) {
+        send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
+        const baselineRes = await runBaseline(scenario, protocol);
+        scenario._baselineResponse = baselineRes.response;
+        scenario._baselineCommand = baselineRes.command;
+        const result = await originalClientRun(scenario);
+        result.baselineResponse = baselineRes.response;
+        result.baselineCommand = baselineRes.command;
+        result.packets = [...currentScenarioPackets];
+        return result;
+      }
       const result = await originalClientRun(scenario);
-      result.baselineResponse = baselineRes.response;
-      result.baselineCommand = baselineRes.command;
       result.packets = [...currentScenarioPackets];
       return result;
     };
@@ -300,13 +305,18 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
     const originalServerRun = activeServer.runScenario.bind(activeServer);
     activeServer.runScenario = async (scenario) => {
       currentScenarioPackets = [];
-      send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
-      const baselineRes = await runBaseline(scenario, protocol);
-      scenario._baselineResponse = baselineRes.response;
-      scenario._baselineCommand = baselineRes.command;
+      if (baseline) {
+        send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
+        const baselineRes = await runBaseline(scenario, protocol);
+        scenario._baselineResponse = baselineRes.response;
+        scenario._baselineCommand = baselineRes.command;
+        const result = await originalServerRun(scenario);
+        result.baselineResponse = baselineRes.response;
+        result.baselineCommand = baselineRes.command;
+        result.packets = [...currentScenarioPackets];
+        return result;
+      }
       const result = await originalServerRun(scenario);
-      result.baselineResponse = baselineRes.response;
-      result.baselineCommand = baselineRes.command;
       result.packets = [...currentScenarioPackets];
       return result;
     };
