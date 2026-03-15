@@ -1167,11 +1167,9 @@
         addLogEntry('host-down', `${p}!! HOST DOWN — ${evt.host}:${evt.port} unreachable after "${evt.scenario}" — possible crash/DoS !!`);
         break;
       case 'health-probe': {
-        const tcp = evt.probe.tcp;
-        const ht = evt.probe.https;
-        const tcpStr = tcp.alive ? `TCP OK (${tcp.latency}ms)` : `TCP FAIL (${tcp.error})`;
-        const htStr = ht.alive ? `HTTPS OK (${ht.statusCode} ${ht.tlsVersion} ${ht.cipher} ${ht.latency}ms)` : `HTTPS FAIL (${ht.error})`;
-        addLogEntry('health-probe', `${p}Health: ${tcpStr}  |  ${htStr}`);
+        const ping = evt.probe.tcp || evt.probe.udp;
+        const pingStr = ping && ping.alive ? `Ping OK (${ping.latency}ms)` : `Ping FAIL (${ping ? ping.error : 'no probe'})`;
+        addLogEntry('health-probe', `${p}Health: ${pingStr}`);
         break;
       }
       default:
@@ -1210,18 +1208,11 @@
       // No probe ran (PASSED status) — show a dash
       return '<span class="probe-skip" title="No probe needed — scenario passed">—</span>';
     }
-    const tcp = probe.tcp || {};
-    const ht = probe.https || {};
-    const tcpCls = tcp.alive ? 'probe-ok' : 'probe-fail';
-    const htCls = ht.alive ? 'probe-ok' : 'probe-fail';
-    const tcpLabel = tcp.alive ? `OK ${tcp.latency}ms` : `FAIL`;
-    const htLabel = ht.alive ? `${ht.statusCode} ${ht.latency}ms` : `FAIL`;
-    const tcpTitle = tcp.alive ? `TCP connected in ${tcp.latency}ms` : `TCP failed: ${tcp.error}`;
-    const htTitle = ht.alive
-      ? `HTTPS ${ht.statusCode} | ${ht.tlsVersion} | ${ht.cipher} | ${ht.latency}ms`
-      : `HTTPS failed: ${ht.error}`;
-    return `<span class="probe-badge ${tcpCls}" title="${_escHtml(tcpTitle)}">TCP ${tcpLabel}</span>` +
-           `<span class="probe-badge ${htCls}" title="${_escHtml(htTitle)}">HTTPS ${htLabel}</span>`;
+    const ping = probe.tcp || probe.udp || {};
+    const cls = ping.alive ? 'probe-ok' : 'probe-fail';
+    const label = ping.alive ? `OK ${ping.latency}ms` : `FAIL`;
+    const title = ping.alive ? `Ping OK in ${ping.latency}ms` : `Ping failed: ${ping.error}`;
+    return `<span class="probe-badge ${cls}" title="${_escHtml(title)}">Ping ${label}</span>`;
   }
 
   function renderFindingCell(finding) {
@@ -1361,8 +1352,7 @@
     const aborted = results.filter(r => r.status === 'ABORTED').length;
     const hostDownCount = results.filter(r => r.hostDown).length;
     const probed = results.filter(r => r.probe).length;
-    const tcpOk = results.filter(r => r.probe && r.probe.tcp && r.probe.tcp.alive).length;
-    const httpsOk = results.filter(r => r.probe && r.probe.https && r.probe.https.alive).length;
+    const pingOk = results.filter(r => r.probe && r.probe.tcp && r.probe.tcp.alive).length;
     const asExpected = results.filter(r => r.verdict === 'AS EXPECTED').length;
     const unexpected = results.filter(r => r.verdict === 'UNEXPECTED').length;
 
@@ -1392,7 +1382,7 @@
       <span class="errors">Errors: ${errors}</span>
       ${aborted > 0 ? `<span>Aborted: ${aborted}</span>` : ''}
       ${hostDownCount > 0 ? `<span class="host-down-count">Host Down: ${hostDownCount}</span>` : ''}
-      ${probed > 0 ? `<span style="margin-left:12px">|</span><span class="probe-summary">TCP ${tcpOk}/${probed}</span><span class="probe-summary">HTTPS ${httpsOk}/${probed}</span>` : ''}
+      ${probed > 0 ? `<span style="margin-left:12px">|</span><span class="probe-summary">Ping ${pingOk}/${probed}</span>` : ''}
       <span style="margin-left:12px">|</span>
       <span class="as-expected">As Expected: ${asExpected}</span>
       <span class="unexpected-count">Unexpected: ${unexpected}</span>
