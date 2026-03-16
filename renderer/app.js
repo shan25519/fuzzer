@@ -774,6 +774,8 @@
     if (activeProtocol === 'h2') disabled = h2DefaultDisabled;
     if (activeProtocol === 'quic') disabled = quicDefaultDisabled;
     if (activeProtocol === 'raw-tcp') disabled = new Set(); // all TCP scenarios are selectable
+    // In distributed mode, server-side scenarios are runnable — don't skip them
+    if (distributedMode) disabled = new Set();
 
     checkboxes.forEach(cb => {
       if (checked && disabled.has(cb.dataset.category)) return;
@@ -1218,7 +1220,9 @@
   function renderFindingCell(finding) {
     if (!finding) return '<span class="finding-badge finding-INFO">—</span>';
     const title = finding.reason ? _escHtml(finding.reason) : '';
-    const sevHtml = finding.severity
+    // Only show severity badge on FAIL/WARN — it's noise on PASS/INFO
+    const showSev = finding.severity && (finding.grade === 'FAIL' || finding.grade === 'WARN');
+    const sevHtml = showSev
       ? `<span class="severity-badge sev-${finding.severity}">${finding.severity}</span>`
       : '';
     return `<span class="finding-badge finding-${finding.grade}" title="${title}">${finding.grade}</span>${sevHtml}`;
@@ -1276,6 +1280,9 @@
     const response = result.response || '';
     const baseline = result.baselineResponse || 'N/A';
     const cat = meta ? meta.category : '?';
+    const isH2 = typeof cat === 'string' && cat.length === 2 && cat[0] === 'A';
+    const isQuic = typeof cat === 'string' && cat.length >= 2 && cat[0] === 'Q';
+    const noBaseline = isH2 || isQuic;
     const hostDown = result.hostDown || false;
 
     const tr = document.createElement('tr');
@@ -1288,7 +1295,7 @@
       <td>${_escHtml(scenario)}</td>
       <td>${_escHtml(cat)}</td>
       <td><span class="status-badge status-${status}">${status}</span>${downBadge}</td>
-      <td style="font-size: 11px; color: var(--text-secondary);">${_escHtml(baseline)}</td>
+      <td style="font-size: 11px; color: var(--text-secondary);${noBaseline ? ' opacity: 0.35;' : ''}">${noBaseline ? (isH2 ? 'N/A (HTTP/2)' : 'N/A (QUIC)') : _escHtml(baseline)}</td>
       <td>${healthHtml}</td>
       <td>${findingHtml}</td>
       <td><span class="verdict-badge verdict-${verdictCls}" title="${_escHtml(verdictTitle)}">${verdict}</span></td>
@@ -1439,7 +1446,9 @@
     entry += `Verdict: ${r.verdict}\n`;
     entry += `Target Response: ${r.response}\n`;
 
-    if (r.baselineCommand) {
+    const exportCat = meta ? meta.category : '';
+    const exportNoBaseline = typeof exportCat === 'string' && exportCat.length >= 2 && (exportCat[0] === 'A' || exportCat[0] === 'Q');
+    if (r.baselineCommand && !exportNoBaseline) {
       entry += `\n[OpenSSL Baseline Check]\n`;
       entry += `Command: ${r.baselineCommand}\n`;
       entry += `Response: ${r.baselineResponse}\n`;
