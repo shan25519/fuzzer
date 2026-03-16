@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Scenario Reference</title>
+  
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+      line-height: 1.6;
+      color: #333;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #f8f9fa;
+    }
+    .container {
+      background: #ffffff;
+      padding: 3rem 4rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    h1 { color: #2c3e50; font-size: 2.5em; border-bottom: 2px solid #eaeaea; padding-bottom: 0.3em; margin-bottom: 1em; }
+    h2 { color: #34495e; font-size: 2em; border-bottom: 1px solid #eaeaea; padding-bottom: 0.3em; margin-top: 1.5em; margin-bottom: 1em; }
+    h3 { color: #495057; font-size: 1.5em; margin-top: 1.5em; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 1.5em 0; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+    th, td { border-bottom: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; padding: 12px 16px; text-align: left; }
+    th:last-child, td:last-child { border-right: none; }
+    tr:last-child td { border-bottom: none; }
+    th { background-color: #f1f3f5; color: #495057; font-weight: 600; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.5px; }
+    tr:nth-child(even) { background-color: #fcfcfc; }
+    tr:hover { background-color: #f8f9fa; }
+    code { background-color: #f1f3f5; padding: 0.2em 0.4em; border-radius: 4px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; color: #d63384; font-size: 0.9em; }
+    blockquote { background: #f8f9fa; border-left: 5px solid #4dabf7; margin: 1.5em 0; padding: 1em 1.5em; border-radius: 0 8px 8px 0; color: #495057; }
+    a { color: #228be6; text-decoration: none; }
+    a:hover { text-decoration: underline; color: #1c7ed6; }
+    .expected-dropped { color: #e03131; font-weight: bold; background-color: #fff5f5; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .expected-passed { color: #2f9e44; font-weight: bold; background-color: #ebfbee; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .expected-connected { color: #1971c2; font-weight: bold; background-color: #e7f5ff; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .expected-failed { color: #e8590c; font-weight: bold; background-color: #fff4e6; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    ul { padding-left: 1.5em; }
+    li { margin-bottom: 0.5em; }
+  </style>
+  
+</head>
+<body>
+  <div class="container">
+    <h1>Test Scenario Reference</h1>
+<p>Complete catalog of all fuzzer test scenarios across <strong>754 tests</strong> in <strong>6 protocols</strong>.</p>
+<h2>How to Read This Document</h2>
+<p>Each test sends crafted protocol data and checks the target&#39;s response:</p>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Expected = DROPPED</strong></td>
+<td>Target SHOULD reject this input (security test)</td>
+</tr>
+<tr>
+<td><strong>Expected = PASSED</strong></td>
+<td>Target SHOULD accept this input (compatibility test)</td>
+</tr>
+<tr>
+<td><strong>PASS</strong></td>
+<td>Behavior matched expectations</td>
+</tr>
+<tr>
+<td><strong>FAIL</strong></td>
+<td>Target accepted malicious input it should have rejected, or crashed</td>
+</tr>
+<tr>
+<td><strong>WARN</strong></td>
+<td>Target was stricter than expected (rejected valid input)</td>
+</tr>
+<tr>
+<td><strong>INFO</strong></td>
+<td>No expected value set, or scenario errored/aborted</td>
+</tr>
+</tbody></table>
+<p><strong>Side</strong> indicates who sends the test data:</p>
+<ul>
+<li><strong>Client → Server</strong> — Fuzzer connects to target and sends malformed data</li>
+<li><strong>Server → Client</strong> — Fuzzer acts as server and sends malformed responses to connecting client</li>
+</ul>
+<h2>Table of Contents</h2>
+<ul>
+<li><a href="#tls-scenarios"><strong>TLS</strong> (445 tests)</a><ul>
+<li><a href="#a-handshake-order-violations-client">A: Handshake Order Violations (Client) (10)</a></li>
+<li><a href="#b-handshake-order-violations-server">B: Handshake Order Violations (Server) (5)</a></li>
+<li><a href="#c-parameter-mutation">C: Parameter Mutation (10)</a></li>
+<li><a href="#d-alert-injection">D: Alert Injection (12)</a></li>
+<li><a href="#e-tcp-manipulation">E: TCP Manipulation (12)</a></li>
+<li><a href="#f-record-layer-attacks">F: Record Layer Attacks (22)</a></li>
+<li><a href="#g-changecipherspec-attacks">G: ChangeCipherSpec Attacks (8)</a></li>
+<li><a href="#h-extension-fuzzing">H: Extension Fuzzing (10)</a></li>
+<li><a href="#i-known-vulnerability-detection-cves">I: Known Vulnerability Detection (CVEs) (32)</a></li>
+<li><a href="#j-post-quantum-cryptography-pqc">J: Post-Quantum Cryptography (PQC) (16)</a></li>
+<li><a href="#k-sni-evasion-fragmentation">K: SNI Evasion &amp; Fragmentation (16)</a></li>
+<li><a href="#l-alpn-protocol-confusion">L: ALPN Protocol Confusion (13)</a></li>
+<li><a href="#m-extension-malformation-placement">M: Extension Malformation &amp; Placement (22)</a></li>
+<li><a href="#n-tcp-tls-parameter-reneging">N: TCP/TLS Parameter Reneging (20)</a></li>
+<li><a href="#o-tls-1-3-early-data-0-rtt-fuzzing">O: TLS 1.3 Early Data &amp; 0-RTT Fuzzing (24)</a></li>
+<li><a href="#p-advanced-handshake-record-fuzzing">P: Advanced Handshake Record Fuzzing (26)</a></li>
+<li><a href="#q-clienthello-field-mutations">Q: ClientHello Field Mutations (24)</a></li>
+<li><a href="#r-extension-inner-structure-fuzzing">R: Extension Inner Structure Fuzzing (28)</a></li>
+<li><a href="#s-record-layer-byte-attacks">S: Record Layer Byte Attacks (16)</a></li>
+<li><a href="#t-alert-ccs-byte-level-fuzzing">T: Alert &amp; CCS Byte-Level Fuzzing (20)</a></li>
+<li><a href="#u-handshake-type-legacy-protocol-fuzzing">U: Handshake Type &amp; Legacy Protocol Fuzzing (20)</a></li>
+<li><a href="#v-cipher-suite-signature-algorithm-fuzzing">V: Cipher Suite &amp; Signature Algorithm Fuzzing (22)</a></li>
+<li><a href="#w-server-certificate-x-509-field-fuzzing">W: Server Certificate X.509 Field Fuzzing (15)</a></li>
+<li><a href="#x-client-certificate-abuse">X: Client Certificate Abuse (24)</a></li>
+<li><a href="#y-certificate-chain-message-structure">Y: Certificate Chain &amp; Message Structure (8)</a></li>
+<li><a href="#z-well-behaved-counterparts">Z: Well-behaved Counterparts (10)</a></li>
+</ul>
+</li>
+<li><a href="#tls-scan-scenarios"><strong>TLS Scan</strong> (107 tests)</a><ul>
+<li><a href="#scan-tls-compatibility-scanning">SCAN: TLS Compatibility Scanning (107)</a></li>
+</ul>
+</li>
+<li><a href="#http-2-scenarios"><strong>HTTP/2</strong> (70 tests)</a><ul>
+<li><a href="#aa-http-2-cve-rapid-attack">AA: HTTP/2 CVE &amp; Rapid Attack (2)</a></li>
+<li><a href="#ab-http-2-flood-resource-exhaustion">AB: HTTP/2 Flood / Resource Exhaustion (3)</a></li>
+<li><a href="#ac-http-2-stream-flow-control-violations">AC: HTTP/2 Stream &amp; Flow Control Violations (4)</a></li>
+<li><a href="#ad-http-2-frame-structure-header-attacks">AD: HTTP/2 Frame Structure &amp; Header Attacks (5)</a></li>
+<li><a href="#ae-http-2-stream-abuse-extensions">AE: HTTP/2 Stream Abuse Extensions (2)</a></li>
+<li><a href="#af-http-2-extended-frame-attacks">AF: HTTP/2 Extended Frame Attacks (7)</a></li>
+<li><a href="#ag-http-2-flow-control-attacks">AG: HTTP/2 Flow Control Attacks (4)</a></li>
+<li><a href="#ah-http-2-connectivity-tls-probes">AH: HTTP/2 Connectivity &amp; TLS Probes (12)</a></li>
+<li><a href="#ai-http-2-general-frame-mutation">AI: HTTP/2 General Frame Mutation (1)</a></li>
+<li><a href="#aj-http-2-server-to-client-attacks">AJ: HTTP/2 Server-to-Client Attacks (10)</a></li>
+<li><a href="#ak-http-2-server-protocol-violations">AK: HTTP/2 Server Protocol Violations (9)</a></li>
+<li><a href="#al-http-2-server-header-violations">AL: HTTP/2 Server Header Violations (11)</a></li>
+</ul>
+</li>
+<li><a href="#quic-scenarios"><strong>QUIC</strong> (33 tests)</a><ul>
+<li><a href="#qa-quic-handshake-connection-initial">QA: QUIC Handshake &amp; Connection Initial (7)</a></li>
+<li><a href="#qb-quic-transport-parameters-alpn">QB: QUIC Transport Parameters &amp; ALPN (2)</a></li>
+<li><a href="#qc-quic-resource-exhaustion-dos">QC: QUIC Resource Exhaustion &amp; DoS (2)</a></li>
+<li><a href="#qd-quic-flow-control-stream-errors">QD: QUIC Flow Control &amp; Stream Errors (6)</a></li>
+<li><a href="#qe-quic-connection-migration-path">QE: QUIC Connection Migration &amp; Path (2)</a></li>
+<li><a href="#qf-quic-frame-structure-mutation">QF: QUIC Frame Structure &amp; Mutation (3)</a></li>
+<li><a href="#ql-quic-server-to-client-attacks">QL: QUIC Server-to-Client Attacks (11)</a></li>
+</ul>
+</li>
+<li><a href="#quic-scan-scenarios"><strong>QUIC Scan</strong> (46 tests)</a><ul>
+<li><a href="#qscan-quic-compatibility-scanning">QSCAN: QUIC Compatibility Scanning (46)</a></li>
+</ul>
+</li>
+<li><a href="#raw-tcp-scenarios"><strong>Raw TCP</strong> (53 tests)</a><ul>
+<li><a href="#ra-tcp-syn-attacks">RA: TCP SYN Attacks (5)</a></li>
+<li><a href="#rb-tcp-rst-injection">RB: TCP RST Injection (5)</a></li>
+<li><a href="#rc-tcp-sequence-ack-manipulation">RC: TCP Sequence/ACK Manipulation (4)</a></li>
+<li><a href="#rd-tcp-window-attacks">RD: TCP Window Attacks (5)</a></li>
+<li><a href="#re-tcp-segment-reordering-overlap">RE: TCP Segment Reordering &amp; Overlap (6)</a></li>
+<li><a href="#rf-tcp-urgent-pointer-attacks">RF: TCP Urgent Pointer Attacks (3)</a></li>
+<li><a href="#rg-tcp-state-machine-fuzzing">RG: TCP State Machine Fuzzing (7)</a></li>
+<li><a href="#rh-tcp-option-fuzzing-tls">RH: TCP Option Fuzzing (TLS) (15)</a></li>
+<li><a href="#rx-advanced-tls-h2-tcp-fuzzing">RX: Advanced TLS/H2 TCP Fuzzing (3)</a></li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2>TLS Scenarios</h2>
+<h3>A: Handshake Order Violations (Client)</h3>
+<blockquote>
+<p>🟠 high · 10 tests · 10 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>out-of-order-finished-first-small-ch</code></td>
+<td align="center">→</td>
+<td>Send Finished before ClientHello [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>out-of-order-finished-first-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send Finished before ClientHello [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>out-of-order-cke-before-hello-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientKeyExchange before ClientHello [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>out-of-order-cke-before-hello-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientKeyExchange before ClientHello [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>duplicate-client-hello-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello twice [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>duplicate-client-hello-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello twice [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>client-hello-after-finished-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, receive ServerHello, then send another ClientHello [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>client-hello-after-finished-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, receive ServerHello, then send another ClientHello [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>skip-client-key-exchange-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello then jump straight to ChangeCipherSpec + Finished [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>skip-client-key-exchange-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello then jump straight to ChangeCipherSpec + Finished [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject handshake order violations (protocol state machine bypass)</td>
+</tr>
+</tbody></table>
+<h3>B: Handshake Order Violations (Server)</h3>
+<blockquote>
+<p>🟠 high · 5 tests · 5 Server → Client</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>server-hello-before-client-hello</code></td>
+<td align="center">←</td>
+<td>Server sends ServerHello immediately without waiting for ClientHello</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject server handshake order violations (state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>duplicate-server-hello</code></td>
+<td align="center">←</td>
+<td>Server sends ServerHello twice</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject server handshake order violations (state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>skip-server-hello-done</code></td>
+<td align="center">←</td>
+<td>Server omits ServerHelloDone</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject server handshake order violations (state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>certificate-before-server-hello</code></td>
+<td align="center">←</td>
+<td>Server sends Certificate before ServerHello</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject server handshake order violations (state machine bypass)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>double-server-hello-done</code></td>
+<td align="center">←</td>
+<td>Server sends ServerHelloDone twice</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject server handshake order violations (state machine bypass)</td>
+</tr>
+</tbody></table>
+<h3>C: Parameter Mutation</h3>
+<blockquote>
+<p>🟡 medium · 10 tests · 8 Client → Server, 2 Server → Client</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>version-downgrade-mid-handshake-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello says TLS 1.2, then CKE record header says TLS 1.0 [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>version-downgrade-mid-handshake-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello says TLS 1.2, then CKE record header says TLS 1.0 [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>session-id-mutation-small-ch</code></td>
+<td align="center">→</td>
+<td>Change session ID between handshake messages [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>session-id-mutation-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Change session ID between handshake messages [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>sni-mismatch-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with SNI &quot;a.com&quot;, then another with SNI &quot;b.com&quot; [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>sni-mismatch-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with SNI &quot;a.com&quot;, then another with SNI &quot;b.com&quot; [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>random-overwrite-small-ch</code></td>
+<td align="center">→</td>
+<td>Send identical ClientHello but with different random value [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>random-overwrite-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send identical ClientHello but with different random value [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>cipher-suite-mismatch</code></td>
+<td align="center">←</td>
+<td>Server selects a cipher suite not in client&#39;s offered list</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>compression-method-mismatch</code></td>
+<td align="center">←</td>
+<td>Server picks DEFLATE compression when client only offered NULL</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject parameter mutation (downgrade/mismatch attacks)</td>
+</tr>
+</tbody></table>
+<h3>D: Alert Injection</h3>
+<blockquote>
+<p>🟡 medium · 12 tests · 12 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>alert-during-handshake-small-ch</code></td>
+<td align="center">→</td>
+<td>Send warning alert between ClientHello and CKE [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>alert-during-handshake-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send warning alert between ClientHello and CKE [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>fatal-alert-then-continue-small-ch</code></td>
+<td align="center">→</td>
+<td>Send fatal alert then continue handshake as if nothing happened [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>fatal-alert-then-continue-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send fatal alert then continue handshake as if nothing happened [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>close-notify-mid-handshake-small-ch</code></td>
+<td align="center">→</td>
+<td>Send close_notify then continue with more messages [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>close-notify-mid-handshake-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send close_notify then continue with more messages [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>unknown-alert-type-small-ch</code></td>
+<td align="center">→</td>
+<td>Send alert with undefined description code (255) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>unknown-alert-type-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send alert with undefined description code (255) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>alert-flood-small-ch</code></td>
+<td align="center">→</td>
+<td>Rapid-fire 20 warning alerts [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>alert-flood-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Rapid-fire 20 warning alerts [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>alert-wrong-level-small-ch</code></td>
+<td align="center">→</td>
+<td>Send handshake_failure with warning level instead of fatal [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>alert-wrong-level-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send handshake_failure with warning level instead of fatal [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject alert injection (protocol confusion)</td>
+</tr>
+</tbody></table>
+<h3>E: TCP Manipulation</h3>
+<blockquote>
+<p>🔵 low · 12 tests · 10 Client → Server, 2 Server → Client</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>fin-after-client-hello-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, then TCP FIN, then try to continue [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>fin-after-client-hello-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, then TCP FIN, then try to continue [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>rst-mid-handshake-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, receive response, then TCP RST [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>rst-mid-handshake-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello, receive response, then TCP RST [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>half-close-continue-small-ch</code></td>
+<td align="center">→</td>
+<td>Half-close write side then send more TLS records [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>half-close-continue-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Half-close write side then send more TLS records [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>slow-drip-client-hello-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello 1 byte at a time with delays [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>slow-drip-client-hello-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello 1 byte at a time with delays [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>split-record-across-segments-small-ch</code></td>
+<td align="center">→</td>
+<td>Fragment a ClientHello TLS record across 10 TCP segments [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>split-record-across-segments-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Fragment a ClientHello TLS record across 10 TCP segments [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>fin-after-server-hello</code></td>
+<td align="center">←</td>
+<td>Server sends ServerHello then TCP FIN then continues</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>fin-from-both</code></td>
+<td align="center">←</td>
+<td>Server sends FIN immediately after ServerHello, simulating simultaneous FIN</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject TCP manipulation abuse</td>
+</tr>
+</tbody></table>
+<h3>F: Record Layer Attacks</h3>
+<blockquote>
+<p>🟠 high · 22 tests · 22 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>tls13-strict-record-version-12-small-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using Record Version 0x0303 (TLS 1.2) instead of 0x0301 (Legacy) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Standard TLS 1.3 servers usually accept 0x0303, though RFC 8446 recommends 0x0301</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>tls13-strict-record-version-12-pqc-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using Record Version 0x0303 (TLS 1.2) instead of 0x0301 (Legacy) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Standard TLS 1.3 servers usually accept 0x0303, though RFC 8446 recommends 0x0301</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>tls13-strict-record-version-13-small-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using Record Version 0x0304 (TLS 1.3) — often dropped by middleboxes [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Strict TLS 1.3 servers might accept this, but many drop it for middlebox compatibility reasons</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>tls13-strict-record-version-13-pqc-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using Record Version 0x0304 (TLS 1.3) — often dropped by middleboxes [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Strict TLS 1.3 servers might accept this, but many drop it for middlebox compatibility reasons</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>tls13-record-version-garbage-small-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using undefined Record Version (0x0305) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Undefined protocol versions should be rejected with an alert or connection close</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>tls13-record-version-garbage-pqc-ch</code></td>
+<td align="center">→</td>
+<td>TLS 1.3 ClientHello using undefined Record Version (0x0305) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Undefined protocol versions should be rejected with an alert or connection close</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>oversized-record-small-ch</code></td>
+<td align="center">→</td>
+<td>Send a TLS record &gt; 16384 bytes [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>oversized-record-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send a TLS record &gt; 16384 bytes [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>zero-length-record-small-ch</code></td>
+<td align="center">→</td>
+<td>Send a TLS record with empty payload [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>zero-length-record-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send a TLS record with empty payload [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>wrong-content-type-small-ch</code></td>
+<td align="center">→</td>
+<td>Send handshake data with application_data content type [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>wrong-content-type-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send handshake data with application_data content type [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td><code>wrong-record-length-small-ch</code></td>
+<td align="center">→</td>
+<td>TLS record length field doesn&#39;t match actual payload [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">14</td>
+<td><code>wrong-record-length-pqc-ch</code></td>
+<td align="center">→</td>
+<td>TLS record length field doesn&#39;t match actual payload [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">15</td>
+<td><code>interleaved-content-types-small-ch</code></td>
+<td align="center">→</td>
+<td>Mix handshake and application_data records during handshake [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">16</td>
+<td><code>interleaved-content-types-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Mix handshake and application_data records during handshake [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">17</td>
+<td><code>record-version-mismatch-small-ch</code></td>
+<td align="center">→</td>
+<td>Record header says TLS 1.0, ClientHello body says TLS 1.2 [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Record version often differs from body version (common compat behavior)</td>
+</tr>
+<tr>
+<td align="right">18</td>
+<td><code>record-version-mismatch-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Record header says TLS 1.0, ClientHello body says TLS 1.2 [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Record version often differs from body version (common compat behavior)</td>
+</tr>
+<tr>
+<td align="right">19</td>
+<td><code>multiple-handshakes-one-record-small-ch</code></td>
+<td align="center">→</td>
+<td>Pack ClientHello + ClientKeyExchange in a single TLS record [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">20</td>
+<td><code>multiple-handshakes-one-record-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Pack ClientHello + ClientKeyExchange in a single TLS record [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">21</td>
+<td><code>garbage-between-records-small-ch</code></td>
+<td align="center">→</td>
+<td>Random garbage bytes between valid TLS records [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+<tr>
+<td align="right">22</td>
+<td><code>garbage-between-records-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Random garbage bytes between valid TLS records [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject record layer violations (fundamental protocol violations)</td>
+</tr>
+</tbody></table>
+<h3>G: ChangeCipherSpec Attacks</h3>
+<blockquote>
+<p>🟠 high · 8 tests · 8 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>early-ccs-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec before receiving ServerHelloDone [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>early-ccs-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec before receiving ServerHelloDone [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>multiple-ccs-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec three times in a row [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>multiple-ccs-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec three times in a row [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>ccs-before-client-hello-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec as the very first message [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>ccs-before-client-hello-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ChangeCipherSpec as the very first message [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>ccs-with-payload-small-ch</code></td>
+<td align="center">→</td>
+<td>ChangeCipherSpec record with extra garbage bytes [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>ccs-with-payload-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ChangeCipherSpec record with extra garbage bytes [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject CCS attacks (CVE-2014-0224 vector)</td>
+</tr>
+</tbody></table>
+<h3>H: Extension Fuzzing</h3>
+<blockquote>
+<p>🟡 medium · 10 tests · 10 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>duplicate-extensions-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with the same extension type twice [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>duplicate-extensions-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with the same extension type twice [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>unknown-extensions-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with unregistered extension type IDs [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Server should ignore unknown extensions per RFC</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>unknown-extensions-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with unregistered extension type IDs [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Server should ignore unknown extensions per RFC</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>oversized-extension-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with a 64KB extension [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>oversized-extension-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with a 64KB extension [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>empty-sni-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with empty SNI hostname [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Empty SNI is tolerated by most servers (uses default vhost)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>empty-sni-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with empty SNI hostname [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Empty SNI is tolerated by most servers (uses default vhost)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>malformed-supported-versions-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with garbage data in supported_versions extension [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>malformed-supported-versions-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with garbage data in supported_versions extension [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension fuzzing (parser robustness)</td>
+</tr>
+</tbody></table>
+<h3>I: Known Vulnerability Detection (CVEs)</h3>
+<blockquote>
+<p>🔴 critical · 32 tests · 32 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>heartbleed-cve-2014-0160-small-ch</code></td>
+<td align="center">→</td>
+<td>Heartbleed: send heartbeat with oversized payload_length to leak memory [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>heartbleed-cve-2014-0160-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Heartbleed: send heartbeat with oversized payload_length to leak memory [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>poodle-sslv3-cve-2014-3566-small-ch</code></td>
+<td align="center">→</td>
+<td>POODLE: attempt SSL 3.0 connection with CBC cipher [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>poodle-sslv3-cve-2014-3566-pqc-ch</code></td>
+<td align="center">→</td>
+<td>POODLE: attempt SSL 3.0 connection with CBC cipher [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>ccs-injection-cve-2014-0224-small-ch</code></td>
+<td align="center">→</td>
+<td>CCS Injection: send CCS before key exchange to force weak keys [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>ccs-injection-cve-2014-0224-pqc-ch</code></td>
+<td align="center">→</td>
+<td>CCS Injection: send CCS before key exchange to force weak keys [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>freak-export-rsa-cve-2015-0204-small-ch</code></td>
+<td align="center">→</td>
+<td>FREAK: offer only RSA export cipher suites (512-bit keys) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>freak-export-rsa-cve-2015-0204-pqc-ch</code></td>
+<td align="center">→</td>
+<td>FREAK: offer only RSA export cipher suites (512-bit keys) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>logjam-export-dhe-cve-2015-4000-small-ch</code></td>
+<td align="center">→</td>
+<td>Logjam: offer only DHE export cipher suites (512-bit DH) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>logjam-export-dhe-cve-2015-4000-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Logjam: offer only DHE export cipher suites (512-bit DH) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>drown-sslv2-cve-2016-0800-small-ch</code></td>
+<td align="center">→</td>
+<td>DROWN: send SSLv2 ClientHello to check SSLv2 support [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>drown-sslv2-cve-2016-0800-pqc-ch</code></td>
+<td align="center">→</td>
+<td>DROWN: send SSLv2 ClientHello to check SSLv2 support [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td><code>sweet32-3des-cve-2016-2183-small-ch</code></td>
+<td align="center">→</td>
+<td>Sweet32: offer only 3DES/64-bit block cipher suites [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">14</td>
+<td><code>sweet32-3des-cve-2016-2183-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Sweet32: offer only 3DES/64-bit block cipher suites [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">15</td>
+<td><code>crime-compression-cve-2012-4929-small-ch</code></td>
+<td align="center">→</td>
+<td>CRIME: offer DEFLATE TLS compression to check if server accepts [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">16</td>
+<td><code>crime-compression-cve-2012-4929-pqc-ch</code></td>
+<td align="center">→</td>
+<td>CRIME: offer DEFLATE TLS compression to check if server accepts [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">17</td>
+<td><code>rc4-bias-cve-2013-2566-small-ch</code></td>
+<td align="center">→</td>
+<td>RC4 Bias: offer only RC4 cipher suites [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">18</td>
+<td><code>rc4-bias-cve-2013-2566-pqc-ch</code></td>
+<td align="center">→</td>
+<td>RC4 Bias: offer only RC4 cipher suites [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">19</td>
+<td><code>beast-cbc-tls10-cve-2011-3389-small-ch</code></td>
+<td align="center">→</td>
+<td>BEAST: offer TLS 1.0 with only CBC cipher suites [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">20</td>
+<td><code>beast-cbc-tls10-cve-2011-3389-pqc-ch</code></td>
+<td align="center">→</td>
+<td>BEAST: offer TLS 1.0 with only CBC cipher suites [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">21</td>
+<td><code>insecure-renegotiation-cve-2009-3555-small-ch</code></td>
+<td align="center">→</td>
+<td>Test for insecure TLS renegotiation by omitting renegotiation_info [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">22</td>
+<td><code>insecure-renegotiation-cve-2009-3555-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Test for insecure TLS renegotiation by omitting renegotiation_info [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">23</td>
+<td><code>tls-fallback-scsv-downgrade-small-ch</code></td>
+<td align="center">→</td>
+<td>Downgrade detection: send TLS 1.1 ClientHello with TLS_FALLBACK_SCSV [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">24</td>
+<td><code>tls-fallback-scsv-downgrade-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Downgrade detection: send TLS 1.1 ClientHello with TLS_FALLBACK_SCSV [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">25</td>
+<td><code>null-cipher-suites-small-ch</code></td>
+<td align="center">→</td>
+<td>Offer only NULL encryption cipher suites (no encryption) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">26</td>
+<td><code>null-cipher-suites-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Offer only NULL encryption cipher suites (no encryption) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">27</td>
+<td><code>anon-dh-no-auth-small-ch</code></td>
+<td align="center">→</td>
+<td>Offer only anonymous DH cipher suites (no server authentication) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">28</td>
+<td><code>anon-dh-no-auth-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Offer only anonymous DH cipher suites (no server authentication) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">29</td>
+<td><code>des-weak-cipher-small-ch</code></td>
+<td align="center">→</td>
+<td>Offer only DES cipher (56-bit key, trivially breakable) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">30</td>
+<td><code>des-weak-cipher-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Offer only DES cipher (56-bit key, trivially breakable) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">31</td>
+<td><code>ticketbleed-cve-2016-9244-small-ch</code></td>
+<td align="center">→</td>
+<td>Ticketbleed: send session ticket with non-standard length to leak memory [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+<tr>
+<td align="right">32</td>
+<td><code>ticketbleed-cve-2016-9244-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Ticketbleed: send session ticket with non-standard length to leak memory [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject known vulnerability vectors (CVE detection)</td>
+</tr>
+</tbody></table>
+<h3>J: Post-Quantum Cryptography (PQC)</h3>
+<blockquote>
+<p>🔵 low · 16 tests · 16 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>pqc-hybrid-x25519-mlkem768-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with X25519+ML-KEM-768 hybrid key share (1216 bytes) [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>pqc-hybrid-x25519-mlkem768-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with X25519+ML-KEM-768 hybrid key share (1216 bytes) [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>pqc-standalone-mlkem768-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with standalone ML-KEM-768 key share (1184 bytes) [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>pqc-standalone-mlkem768-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with standalone ML-KEM-768 key share (1184 bytes) [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>pqc-kyber-draft-chrome-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with X25519Kyber768 draft group ID (Chrome experimental) [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>pqc-kyber-draft-chrome-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ClientHello with X25519Kyber768 draft group ID (Chrome experimental) [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>pqc-malformed-key-share-small-ch</code></td>
+<td align="center">→</td>
+<td>Send PQC key share with wrong size (should be 1184, send 100) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>pqc-malformed-key-share-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send PQC key share with wrong size (should be 1184, send 100) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>pqc-oversized-key-share-small-ch</code></td>
+<td align="center">→</td>
+<td>Send enormously oversized PQC key share (10KB) to test buffer handling [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>pqc-oversized-key-share-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send enormously oversized PQC key share (10KB) to test buffer handling [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>pqc-multiple-key-shares-small-ch</code></td>
+<td align="center">→</td>
+<td>Send multiple PQC key shares: hybrid + standalone + classical [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>pqc-multiple-key-shares-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send multiple PQC key shares: hybrid + standalone + classical [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td><code>pqc-unknown-group-ids-small-ch</code></td>
+<td align="center">→</td>
+<td>Advertise only unregistered PQC named group IDs [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">14</td>
+<td><code>pqc-unknown-group-ids-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Advertise only unregistered PQC named group IDs [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">15</td>
+<td><code>pqc-mlkem1024-large-small-ch</code></td>
+<td align="center">→</td>
+<td>Send ML-KEM-1024 key share (1568 bytes, highest security level) [small CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+<tr>
+<td align="right">16</td>
+<td><code>pqc-mlkem1024-large-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send ML-KEM-1024 key share (1568 bytes, highest security level) [PQC big CH]</td>
+<td align="center">PASSED</td>
+<td>✅ if accepted; ⚠️ if rejected. Must reject invalid PQC key material</td>
+</tr>
+</tbody></table>
+<h3>K: SNI Evasion &amp; Fragmentation</h3>
+<blockquote>
+<p>🟡 medium · 16 tests · 16 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>sni-not-in-first-packet-small-ch</code></td>
+<td align="center">→</td>
+<td>Fragment ClientHello so SNI hostname is in the 2nd TCP segment [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>sni-not-in-first-packet-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Fragment ClientHello so SNI hostname is in the 2nd TCP segment [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>sni-split-at-hostname-small-ch</code></td>
+<td align="center">→</td>
+<td>Split the ClientHello right in the middle of the SNI hostname string [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>sni-split-at-hostname-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Split the ClientHello right in the middle of the SNI hostname string [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>sni-tiny-fragments-small-ch</code></td>
+<td align="center">→</td>
+<td>Fragment ClientHello into 1-byte TCP segments to evade SNI inspection [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>sni-tiny-fragments-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Fragment ClientHello into 1-byte TCP segments to evade SNI inspection [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>sni-multiple-hostnames-small-ch</code></td>
+<td align="center">→</td>
+<td>SNI extension with multiple server_name entries (different hostnames) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>sni-multiple-hostnames-pqc-ch</code></td>
+<td align="center">→</td>
+<td>SNI extension with multiple server_name entries (different hostnames) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>sni-ip-address-small-ch</code></td>
+<td align="center">→</td>
+<td>SNI extension with an IP address instead of hostname [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>sni-ip-address-pqc-ch</code></td>
+<td align="center">→</td>
+<td>SNI extension with an IP address instead of hostname [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>sni-oversized-hostname-small-ch</code></td>
+<td align="center">→</td>
+<td>SNI with extremely long hostname (500 chars) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>sni-oversized-hostname-pqc-ch</code></td>
+<td align="center">→</td>
+<td>SNI with extremely long hostname (500 chars) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td><code>sni-record-header-fragment-small-ch</code></td>
+<td align="center">→</td>
+<td>Send only the 5-byte TLS record header first, then the rest [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">14</td>
+<td><code>sni-record-header-fragment-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send only the 5-byte TLS record header first, then the rest [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">15</td>
+<td><code>sni-prepend-garbage-record-small-ch</code></td>
+<td align="center">→</td>
+<td>Send a garbage TLS record before the real ClientHello to confuse parsers [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+<tr>
+<td align="right">16</td>
+<td><code>sni-prepend-garbage-record-pqc-ch</code></td>
+<td align="center">→</td>
+<td>Send a garbage TLS record before the real ClientHello to confuse parsers [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject SNI evasion and fragmentation attacks</td>
+</tr>
+</tbody></table>
+<h3>L: ALPN Protocol Confusion</h3>
+<blockquote>
+<p>🟡 medium · 13 tests · 12 Client → Server, 1 Server → Client</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>alpn-unknown-protocols-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing unknown/invented protocol IDs [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>alpn-unknown-protocols-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing unknown/invented protocol IDs [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">3</td>
+<td><code>alpn-empty-protocol-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN containing empty protocol string [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">4</td>
+<td><code>alpn-empty-protocol-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN containing empty protocol string [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">5</td>
+<td><code>alpn-oversized-list-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing 50 protocol entries [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">6</td>
+<td><code>alpn-oversized-list-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing 50 protocol entries [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">7</td>
+<td><code>alpn-duplicate-protocols-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing &quot;h2&quot; five times [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">8</td>
+<td><code>alpn-duplicate-protocols-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN listing &quot;h2&quot; five times [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">9</td>
+<td><code>alpn-very-long-name-small-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN protocol name of 255 bytes (max) [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">10</td>
+<td><code>alpn-very-long-name-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ClientHello with ALPN protocol name of 255 bytes (max) [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">11</td>
+<td><code>alpn-wrong-list-length-small-ch</code></td>
+<td align="center">→</td>
+<td>ALPN extension with protocol_name_list length exceeding actual data [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td><code>alpn-wrong-list-length-pqc-ch</code></td>
+<td align="center">→</td>
+<td>ALPN extension with protocol_name_list length exceeding actual data [PQC big CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td><code>alpn-mismatch-server</code></td>
+<td align="center">←</td>
+<td>Server selects ALPN &quot;h2&quot; when client only offered &quot;http/1.1&quot;</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject ALPN protocol confusion</td>
+</tr>
+</tbody></table>
+<h3>M: Extension Malformation &amp; Placement</h3>
+<blockquote>
+<p>🟡 medium · 22 tests · 22 Client → Server</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th align="right">#</th>
+<th>Scenario</th>
+<th align="center">Side</th>
+<th>Description</th>
+<th align="center">Expected</th>
+<th>Pass/Fail Criteria</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="right">1</td>
+<td><code>ext-sni-wrong-length-short-small-ch</code></td>
+<td align="center">→</td>
+<td>SNI extension with length field shorter than actual data [small CH]</td>
+<td align="center">DROPPED</td>
+<td>✅ if rejected; ❌ if accepted. Must reject extension malformation (parser crash/memory corruption)</td>
+</tr>
+<tr>
+<td align="right">2</td>
+<td><code>ext-sni-wrong-length-short-pqc-ch</code></td>
+<td align="ce
+  </div>
+</body>
+</html>
