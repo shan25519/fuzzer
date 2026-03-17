@@ -10,6 +10,7 @@
   const delayInput = document.getElementById('delayInput');
   const timeoutInput = document.getElementById('timeoutInput');
   const workersInput = document.getElementById('workersInput');
+  workersInput.value = window.fuzzer.cpuCount || 4;
   const verboseCheck = document.getElementById('verboseCheck');
   const scenariosList = document.getElementById('scenariosList');
   const selectAllBtn = document.getElementById('selectAllBtn');

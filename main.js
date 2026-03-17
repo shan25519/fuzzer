@@ -1,10 +1,5 @@
-const cluster = require('cluster');
-if (!cluster.isPrimary) {
-  require('./lib/ui-worker');
-  return;
-}
-
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { fork } = require('child_process');
 const net = require('net');
 const path = require('path');
 const https = require('https');
@@ -242,7 +237,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
         
         await new Promise((resolve) => {
           for (let i = 0; i < numWorkers; i++) {
-            const worker = cluster.fork();
+            const worker = fork(path.join(__dirname, 'lib', 'ui-worker.js'));
             activeWorkers++;
             
             worker.on('message', (msg) => {
@@ -444,7 +439,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
 
         await new Promise((resolve) => {
           for (let i = 0; i < numWorkers; i++) {
-            const worker = cluster.fork();
+            const worker = fork(path.join(__dirname, 'lib', 'ui-worker.js'));
             activeWorkers++;
 
             worker.on('message', (msg) => {
