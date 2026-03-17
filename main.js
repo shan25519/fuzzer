@@ -283,7 +283,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
     // Helper: spawn a well-behaved client for local mode server tests
     function spawnLocalClient(proto, delayMs) {
       if (!localMode) return null;
-      const client = new WellBehavedClient({ host: 'localhost', port: portNum, logger });
+      const client = new WellBehavedClient({ host: '127.0.0.1', port: portNum, logger });
       const promise = new Promise(resolve => {
         setTimeout(async () => {
           try {
