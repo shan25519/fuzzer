@@ -1,4 +1,11 @@
+const cluster = require('cluster');
+if (!cluster.isPrimary) {
+  require('./lib/ui-worker');
+  return;
+}
+
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const net = require('net');
 const path = require('path');
 const https = require('https');
 const url = require('url');
@@ -149,7 +156,7 @@ ipcMain.handle('list-scenarios', () => {
 
 // Run fuzzer
 ipcMain.handle('run-fuzzer', async (event, opts) => {
-  const { mode, host, port, scenarioNames, delay, timeout, pcapFile, verbose, hostname, protocol, dut, loopCount: rawLoop, localMode, baseline } = opts;
+  const { mode, host, port, scenarioNames, delay, timeout, pcapFile, verbose, hostname, protocol, dut, loopCount: rawLoop, localMode, baseline, workers } = opts;
   const loopCount = Math.max(1, Math.min(1000, parseInt(rawLoop, 10) || 1));
 
   const send = (channel, data) => {
@@ -222,53 +229,106 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
 
     const totalWithLoops = scenarios.length * loopCount;
 
-    activeClient = new UnifiedClient({
-      host: clientHost, port: clientPort,
-      timeout: timeout || 5000, delay: delay || 100,
-      logger, pcapFile: pcapFile || null,
-      dut,
-    });
+    if (workers > 1) {
+      send('fuzzer-packet', { type: 'info', message: `Forking ${workers} worker processes for concurrent client fuzzing...` });
+      try {
+        const queue = [];
+        for (let loop = 0; loop < loopCount; loop++) {
+          for (const s of scenarios) queue.push(s);
+        }
+        
+        const numWorkers = Math.min(workers, queue.length);
+        let activeWorkers = 0;
+        
+        await new Promise((resolve) => {
+          for (let i = 0; i < numWorkers; i++) {
+            const worker = cluster.fork();
+            activeWorkers++;
+            
+            worker.on('message', (msg) => {
+              if (msg.type === 'ready') {
+                if (queue.length > 0) {
+                  const s = queue.shift();
+                  send('fuzzer-progress', { scenario: s.name, total: totalWithLoops, current: results.length + 1 });
+                  worker.send({
+                    cmd: 'run', scenarioName: s.name, protocol, baseline
+                  });
+                } else {
+                  worker.send({ cmd: 'abort' });
+                }
+              } else if (msg.type === 'result') {
+                results.push(msg.result);
+                send('fuzzer-result', msg.result);
+                if (msg.result.packets) {
+                  msg.result.packets.forEach(p => send('fuzzer-packet', p));
+                }
+              } else if (msg.type === 'log') {
+                send('fuzzer-packet', msg.data);
+              }
+            });
+            
+            worker.on('exit', () => {
+              activeWorkers--;
+              if (activeWorkers === 0) resolve();
+            });
+            
+            worker.send({
+              cmd: 'init-client', host: clientHost, port: clientPort, timeout, delay, verbose, pcapFile, dut
+            });
+          }
+        });
+      } finally {
+        if (localServer) localServer.stop();
+      }
+    } else {
+      activeClient = new UnifiedClient({
+        host: clientHost, port: clientPort,
+        timeout: timeout || 5000, delay: delay || 100,
+        logger, pcapFile: pcapFile || null,
+        dut,
+      });
 
-    const originalClientRun = activeClient.runScenario.bind(activeClient);
-    activeClient.runScenario = async (scenario) => {
-      currentScenarioPackets = [];
-      if (baseline) {
-        send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
-        const baselineRes = await runBaseline(scenario, protocol);
-        scenario._baselineResponse = baselineRes.response;
-        scenario._baselineCommand = baselineRes.command;
+      const originalClientRun = activeClient.runScenario.bind(activeClient);
+      activeClient.runScenario = async (scenario) => {
+        currentScenarioPackets = [];
+        if (baseline) {
+          send('fuzzer-packet', { type: 'info', message: `[baseline] testing against local OpenSSL...` });
+          const baselineRes = await runBaseline(scenario, protocol);
+          scenario._baselineResponse = baselineRes.response;
+          scenario._baselineCommand = baselineRes.command;
+          const result = await originalClientRun(scenario);
+          result.baselineResponse = baselineRes.response;
+          result.baselineCommand = baselineRes.command;
+          result.packets = [...currentScenarioPackets];
+          return result;
+        }
         const result = await originalClientRun(scenario);
-        result.baselineResponse = baselineRes.response;
-        result.baselineCommand = baselineRes.command;
         result.packets = [...currentScenarioPackets];
         return result;
-      }
-      const result = await originalClientRun(scenario);
-      result.packets = [...currentScenarioPackets];
-      return result;
-    };
+      };
 
-    try {
-      for (let loop = 0; loop < loopCount; loop++) {
-        if (activeClient.aborted) break;
-        if (loopCount > 1) {
-          send('fuzzer-packet', { type: 'info', message: `── Loop ${loop + 1} / ${loopCount} ──` });
-        }
-        for (const scenario of scenarios) {
+      try {
+        for (let loop = 0; loop < loopCount; loop++) {
           if (activeClient.aborted) break;
-          send('fuzzer-progress', { scenario: scenario.name, total: totalWithLoops, current: results.length + 1 });
+          if (loopCount > 1) {
+            send('fuzzer-packet', { type: 'info', message: `── Loop ${loop + 1} / ${loopCount} ──` });
+          }
+          for (const scenario of scenarios) {
+            if (activeClient.aborted) break;
+            send('fuzzer-progress', { scenario: scenario.name, total: totalWithLoops, current: results.length + 1 });
 
-          const result = await activeClient.runScenario(scenario);
+            const result = await activeClient.runScenario(scenario);
 
-          results.push(result);
-          send('fuzzer-result', result);
-          await new Promise(r => setTimeout(r, 300));
+            results.push(result);
+            send('fuzzer-result', result);
+            await new Promise(r => setTimeout(r, 300));
+          }
         }
+      } finally {
+        activeClient.close();
+        activeClient = null;
+        if (localServer) localServer.stop();
       }
-    } finally {
-      activeClient.close();
-      activeClient = null;
-      if (localServer) localServer.stop();
     }
 
     const report = computeOverallGrade(results);
@@ -280,19 +340,28 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
   if (mode === 'server') {
     const serverHostname = hostname || host || 'localhost';
 
-    // Helper: spawn a well-behaved client for local mode server tests
-    function spawnLocalClient(proto, delayMs) {
+    // Helper: spawn a well-behaved client for local mode server tests.
+    // Waits for the server's _onListening callback before connecting,
+    // so the client only connects after the server is actually ready.
+    function spawnLocalClient(proto) {
       if (!localMode) return null;
       const client = new WellBehavedClient({ host: '127.0.0.1', port: portNum, logger });
+      let connected = false;
       const promise = new Promise(resolve => {
-        setTimeout(async () => {
+        const connect = async () => {
+          if (connected) return;
+          connected = true;
+          activeServer._onListening = null;
           try {
             if (proto === 'quic') await client.connectQuic();
             else if (proto === 'h2') await client.connectH2();
             else await client.connectTLS();
           } catch (_) {}
           resolve(client);
-        }, delayMs);
+        };
+        activeServer._onListening = connect;
+        // Safety: if server errors before listening, don't hang forever
+        setTimeout(connect, 35000);
       });
       return promise;
     }
@@ -324,6 +393,115 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
     };
 
     const certInfo = activeServer.getCertInfo();
+
+    if (workers > 1 && scenarios.length > 0) {
+      send('fuzzer-packet', { type: 'info', message: `Forking ${workers} worker processes for concurrent server fuzzing...` });
+
+      // Serialize certInfo — Buffers must be base64 encoded for IPC
+      const certInfoForIPC = {
+        ...certInfo,
+        certDER: certInfo.certDER ? certInfo.certDER.toString('base64') : undefined,
+        keyDER: certInfo.keyDER ? certInfo.keyDER.toString('base64') : undefined,
+      };
+
+      try {
+        const queue = [];
+        for (let loop = 0; loop < loopCount; loop++) {
+          for (const s of scenarios) queue.push(s);
+        }
+        const totalServerWithLoops = queue.length;
+        const numWorkers = Math.min(workers, queue.length);
+
+        // Primary owns the listening socket — pauseOnConnect ensures no data
+        // is consumed before the socket is transferred to a worker
+        const tcpServer = net.createServer({ allowHalfOpen: true, pauseOnConnect: true });
+        await new Promise((res, rej) => {
+          tcpServer.listen(portNum, '0.0.0.0', res);
+          tcpServer.once('error', rej);
+        });
+        send('fuzzer-packet', { type: 'info', message: `Listening on 0.0.0.0:${portNum} — dispatching to ${numWorkers} workers` });
+
+        // Workers assigned a scenario wait for a socket; incoming connections
+        // are paired with waiting workers. This allows true parallelism when
+        // multiple clients connect simultaneously.
+        const waitingForSocket = [];  // { worker, scenarioName }
+        const pendingSockets = [];
+        let activeWorkers = 0;
+        let onAllResults = null;
+
+        const tryPairSocketToWorker = () => {
+          while (waitingForSocket.length > 0 && pendingSockets.length > 0) {
+            const { worker, scenarioName } = waitingForSocket.shift();
+            const sock = pendingSockets.shift();
+            worker.send({ cmd: 'run-on-socket', scenarioName, protocol }, sock);
+          }
+        };
+
+        tcpServer.on('connection', (sock) => {
+          pendingSockets.push(sock);
+          tryPairSocketToWorker();
+        });
+
+        await new Promise((resolve) => {
+          for (let i = 0; i < numWorkers; i++) {
+            const worker = cluster.fork();
+            activeWorkers++;
+
+            worker.on('message', (msg) => {
+              if (msg.type === 'ready') {
+                // Worker ready — assign next scenario from queue
+                if (queue.length > 0) {
+                  const s = queue.shift();
+                  send('fuzzer-progress', { scenario: s.name, total: totalServerWithLoops, current: results.length + 1 });
+                  waitingForSocket.push({ worker, scenarioName: s.name });
+                  tryPairSocketToWorker();
+
+                  // In local mode, spawn a well-behaved client to connect
+                  if (localMode) {
+                    const client = new WellBehavedClient({ host: '127.0.0.1', port: portNum, logger });
+                    const connectFn = protocol === 'quic' ? 'connectQuic'
+                      : protocol === 'h2' ? 'connectH2' : 'connectTLS';
+                    client[connectFn]().catch(() => {}).then(() => client.stop());
+                  }
+                } else {
+                  worker.send({ cmd: 'abort' });
+                }
+              } else if (msg.type === 'result') {
+                results.push(msg.result);
+                send('fuzzer-result', msg.result);
+                if (msg.result.packets) {
+                  msg.result.packets.forEach(p => send('fuzzer-packet', p));
+                }
+                // Check if all results are in
+                if (results.length >= totalServerWithLoops && onAllResults) onAllResults();
+              } else if (msg.type === 'log') {
+                send('fuzzer-packet', msg.data);
+              }
+            });
+
+            worker.on('exit', () => {
+              activeWorkers--;
+              // Safety: if all workers exit before all results, resolve anyway
+              if (activeWorkers === 0 && onAllResults) onAllResults();
+            });
+
+            worker.send({
+              cmd: 'init-server', hostname: serverHostname, port: portNum, timeout, delay, verbose, pcapFile, dut, certInfo: certInfoForIPC
+            });
+          }
+
+          onAllResults = resolve;
+        });
+
+        tcpServer.close();
+      } finally {
+        if (activeServer) activeServer.close();
+        activeServer = null;
+      }
+      const report = computeOverallGrade(results);
+      send('fuzzer-report', report);
+      return { results };
+    }
 
     if (protocol === 'h2') {
       // Start the HTTP/2 server
@@ -359,7 +537,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
             for (const scenario of scenarios) {
               if (activeServer.aborted) break;
               send('fuzzer-progress', { scenario: scenario.name, total: totalH2WithLoops, current: results.length + 1 });
-              const clientPromise = spawnLocalClient('h2', 300);
+              const clientPromise = spawnLocalClient('h2');
               const result = await activeServer.runScenario(scenario);
               if (clientPromise) { const c = await clientPromise; c.stop(); }
               results.push(result);
@@ -424,7 +602,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
             for (const scenario of scenarios) {
               if (activeServer.aborted) break;
               send('fuzzer-progress', { scenario: scenario.name, total: totalQuicWithLoops, current: results.length + 1 });
-              const clientPromise = spawnLocalClient('quic', 300);
+              const clientPromise = spawnLocalClient('quic');
               const result = await activeServer.runScenario(scenario);
               if (clientPromise) { const c = await clientPromise; c.stop(); }
               results.push(result);
@@ -477,7 +655,7 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
         for (const scenario of scenarios) {
           if (activeServer.aborted) break;
           send('fuzzer-progress', { scenario: scenario.name, total: totalTlsWithLoops, current: results.length + 1 });
-          const clientPromise = spawnLocalClient('tls', 500);
+          const clientPromise = spawnLocalClient('tls');
           const result = await activeServer.runScenario(scenario);
           if (clientPromise) { const c = await clientPromise; c.stop(); }
           results.push(result);

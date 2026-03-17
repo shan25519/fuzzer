@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const os = require('os');
 
 contextBridge.exposeInMainWorld('fuzzer', {
+  cpuCount: os.cpus().length,
   listScenarios: () => ipcRenderer.invoke('list-scenarios'),
   run: (opts) => ipcRenderer.invoke('run-fuzzer', opts),
   stop: () => ipcRenderer.invoke('stop-fuzzer'),

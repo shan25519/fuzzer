@@ -9,6 +9,7 @@
   const portInput = document.getElementById('portInput');
   const delayInput = document.getElementById('delayInput');
   const timeoutInput = document.getElementById('timeoutInput');
+  const workersInput = document.getElementById('workersInput');
   const verboseCheck = document.getElementById('verboseCheck');
   const scenariosList = document.getElementById('scenariosList');
   const selectAllBtn = document.getElementById('selectAllBtn');
@@ -818,6 +819,18 @@
     const delay = parseInt(delayInput.value, 10) || 100;
     const timeout = parseInt(timeoutInput.value, 10) || 5000;
     const verbose = verboseCheck.checked;
+    
+    let workers = parseInt(workersInput.value, 10) || 1;
+    const maxWorkers = window.fuzzer.cpuCount || 10;
+    if (workers > maxWorkers) {
+      alert(`Requested threads (${workers}) exceed the available CPU cores (${maxWorkers}).`);
+      workersInput.value = maxWorkers;
+      return;
+    }
+    if (workers < 1) {
+      workers = 1;
+      workersInput.value = 1;
+    }
 
     const dut = dutCheck.checked ? {
       ip: dutIpInput.value.trim(),
@@ -897,6 +910,7 @@
         loopCount,
         localMode,
         baseline: baselineCheck.checked,
+        workers,
       });
 
       if (response.error) {

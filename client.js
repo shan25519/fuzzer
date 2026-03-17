@@ -9,6 +9,9 @@ const { getHttp2Scenario, getHttp2ScenariosByCategory, listHttp2ClientScenarios 
 const { getQuicScenario, getQuicScenariosByCategory, listQuicClientScenarios } = require('./lib/quic-scenarios');
 const { getTcpScenario, getTcpScenariosByCategory, getTcpClientScenarios } = require('./lib/tcp-scenarios');
 const { isRawAvailable } = require('./lib/raw-tcp');
+const { computeOverallGrade } = require('./lib/grader');
+const cluster = require('cluster');
+const os = require('os');
 
 const USAGE = `
   TLS/TCP Protocol Fuzzer — Client Mode
@@ -58,45 +61,7 @@ function parseArgs(argv) {
   return args;
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-
-  const host = args._[0];
-  const port = parseInt(args._[1]);
-
-  // Agent mode — no host/port args means start the control channel
-  if (!host || !port) {
-    const controlPort = parseInt(args['control-port']) || 9200;
-    const token = args['token'] || null;
-    const { startAgent } = require('./lib/agent');
-    startAgent('client', { controlPort, token });
-    process.on('SIGINT', () => process.exit(0));
-    return;
-  }
-
-  if (port < 1 || port > 65535) {
-    console.log(USAGE);
-    process.exit(1);
-  }
-
-  const delay = parseInt(args.delay) || 100;
-  const timeout = parseInt(args.timeout) || 5000;
-  const pcapFile = args.pcap || null;
-  const protocol = args.protocol || 'tls';
-  const useRawTcp = protocol === 'raw-tcp';
-
-  if (useRawTcp && !isRawAvailable()) {
-    console.warn('\x1b[33mWarning: Raw sockets not available. Requires CAP_NET_RAW on Linux.\x1b[0m');
-  }
-
-  console.log('');
-  console.log('  \x1b[1m\x1b[36mTLS/TCP Protocol Fuzzer — Client\x1b[0m');
-  console.log('');
-  console.log(`  \x1b[90mTarget\x1b[0m        ${host}:${port}`);
-  console.log(`  \x1b[90mProtocol\x1b[0m      ${protocol}`);
-  console.log('');
-
-  // Determine which scenarios to run
+function getScenarios(args, useRawTcp, protocol) {
   let scenarios;
   if (args.category) {
     const cat = args.category.toUpperCase();
@@ -147,35 +112,179 @@ async function main() {
     console.log(USAGE);
     process.exit(1);
   }
+  return scenarios;
+}
+
+async function primaryMain(args) {
+  const host = args._[0];
+  const port = parseInt(args._[1]);
+
+  // Agent mode — no host/port args means start the control channel
+  if (!host || !port) {
+    const controlPort = parseInt(args['control-port']) || 9200;
+    const token = args['token'] || null;
+    const { startAgent } = require('./lib/agent');
+    startAgent('client', { controlPort, token });
+    process.on('SIGINT', () => process.exit(0));
+    return;
+  }
+
+  if (port < 1 || port > 65535) {
+    console.log(USAGE);
+    process.exit(1);
+  }
+
+  const protocol = args.protocol || 'tls';
+  const useRawTcp = protocol === 'raw-tcp';
+
+  if (useRawTcp && !isRawAvailable()) {
+    console.warn('\x1b[33mWarning: Raw sockets not available. Requires CAP_NET_RAW on Linux.\x1b[0m');
+  }
+
+  console.log('');
+  console.log('  \x1b[1m\x1b[36mTLS/TCP Protocol Fuzzer — Client\x1b[0m');
+  console.log('');
+  console.log(`  \x1b[90mTarget\x1b[0m        ${host}:${port}`);
+  console.log(`  \x1b[90mProtocol\x1b[0m      ${protocol}`);
+  console.log('');
+
+  const scenarios = getScenarios(args, useRawTcp, protocol);
+
+  if (args.scenario === 'all') {
+    console.log(`  Running ${scenarios.length} client scenarios (opt-in categories excluded, use --category to include)`);
+  }
 
   console.log(`  \x1b[90mScenarios\x1b[0m     ${scenarios.length} scenario(s) queued`);
   console.log('');
 
+  const workerCount = parseInt(args.workers) || os.cpus().length;
+
+  // Single-worker mode: run directly without forking
+  if (workerCount <= 1) {
+    const delay = parseInt(args.delay) || 100;
+    const timeout = parseInt(args.timeout) || 5000;
+    const pcapFile = args.pcap || null;
+    const logger = new Logger({ verbose: args.verbose, json: args.json });
+    const client = new UnifiedClient({ host, port, timeout, delay, logger, pcapFile });
+
+    process.on('SIGINT', () => { client.abort(); client.close(); process.exit(0); });
+
+    const { results, report } = await client.runScenarios(scenarios);
+    client.close();
+    if (pcapFile) logger.info(`PCAP saved to: ${pcapFile}`);
+    const hasErrors = results.some(r => r.status === 'ERROR');
+    const hostWentDown = results.some(r => r.hostDown);
+    const hasFails = report && report.stats.fail > 0;
+    process.exit(hasErrors || hostWentDown || hasFails ? 1 : 0);
+  }
+
+  console.log(`  Forking ${workerCount} worker processes for concurrent fuzzing...`);
+
+  const queue = scenarios.map(s => s.name);
+  const results = [];
+  let activeWorkers = 0;
+
+  for (let i = 0; i < workerCount; i++) {
+    const worker = cluster.fork();
+    activeWorkers++;
+    
+    worker.on('message', (msg) => {
+      if (msg.type === 'ready') {
+        if (queue.length > 0) {
+          worker.send({ type: 'scenario', name: queue.shift() });
+        } else {
+          worker.send({ type: 'done' });
+        }
+      } else if (msg.type === 'result') {
+        results.push(msg.result);
+      }
+    });
+
+    worker.on('exit', () => {
+      activeWorkers--;
+      if (activeWorkers === 0) {
+        const logger = new Logger({ verbose: args.verbose, json: args.json });
+        const report = computeOverallGrade(results);
+        logger.summary(results);
+
+        const pcapFile = args.pcap || null;
+        if (pcapFile) {
+          logger.info(`PCAP saved to: ${pcapFile}`);
+        }
+
+        const hasErrors = results.some(r => r.status === 'ERROR');
+        const hostWentDown = results.some(r => r.hostDown);
+        const hasFails = report && report.stats.fail > 0;
+        process.exit(hasErrors || hostWentDown || hasFails ? 1 : 0);
+      }
+    });
+  }
+
+  process.on('SIGINT', () => {
+    // Gracefully shut down workers before exiting
+    for (const w of Object.values(cluster.workers || {})) {
+      try { w.send({ type: 'done' }); } catch (_) {}
+    }
+    setTimeout(() => process.exit(0), 1000);
+  });
+}
+
+async function workerMain(args) {
+  const host = args._[0];
+  const port = parseInt(args._[1]);
+  if (!host || !port) return;
+
+  const delay = parseInt(args.delay) || 100;
+  const timeout = parseInt(args.timeout) || 5000;
+  let pcapFile = args.pcap || null;
+  const protocol = args.protocol || 'tls';
+  const useRawTcp = protocol === 'raw-tcp';
+
+  if (pcapFile) {
+    pcapFile = `${pcapFile}.worker-${process.pid}`;
+  }
+
   const logger = new Logger({ verbose: args.verbose, json: args.json });
+  const scenarios = getScenarios(args, useRawTcp, protocol);
+
   const client = new UnifiedClient({ host, port, timeout, delay, logger, pcapFile });
 
-  // Handle ctrl+c
   process.on('SIGINT', () => {
     client.abort();
     client.close();
     process.exit(0);
   });
 
-  const { results, report } = await client.runScenarios(scenarios);
-  client.close();
+  process.on('message', async (msg) => {
+    if (msg.type === 'scenario') {
+      const scenario = scenarios.find(s => s.name === msg.name);
+      if (scenario) {
+        const result = await client.runScenario(scenario);
+        setTimeout(() => {
+          process.send({ type: 'result', result });
+          process.send({ type: 'ready' });
+        }, 100);
+      } else {
+        process.send({ type: 'ready' });
+      }
+    } else if (msg.type === 'done') {
+      client.abort();
+      client.close();
+      process.exit(0);
+    }
+  });
 
-  if (pcapFile) {
-    logger.info(`PCAP saved to: ${pcapFile}`);
-  }
-
-  // Exit with non-zero if any failures, errors, or host went down
-  const hasErrors = results.some(r => r.status === 'ERROR');
-  const hostWentDown = results.some(r => r.hostDown);
-  const hasFails = report && report.stats.fail > 0;
-  process.exit(hasErrors || hostWentDown || hasFails ? 1 : 0);
+  process.send({ type: 'ready' });
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err.message);
-  process.exit(1);
-});
+if (cluster.isPrimary) {
+  primaryMain(parseArgs(process.argv.slice(2))).catch((err) => {
+    console.error('Fatal error:', err.message);
+    process.exit(1);
+  });
+} else {
+  workerMain(parseArgs(process.argv.slice(2))).catch((err) => {
+    console.error('Worker error:', err.message);
+    process.exit(1);
+  });
+}
