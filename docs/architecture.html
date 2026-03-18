@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol Fuzzer — Architecture & Design</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    </script>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --primary: #38bdf8;
+            --secondary: #818cf8;
+            --text: #f1f5f9;
+            --text-dim: #94a3b8;
+            --accent: #f472b6;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        header {
+            border-bottom: 1px solid var(--surface);
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+        h1 { font-size: 2.5rem; margin: 0; color: var(--primary); }
+        h2 { font-size: 1.8rem; margin-top: 60px; color: var(--secondary); border-left: 4px solid var(--primary); padding-left: 15px; }
+        h3 { font-size: 1.3rem; color: var(--accent); margin-top: 30px; }
+        p { color: var(--text-dim); font-size: 1.1rem; }
+        .diagram-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+        code {
+            background: #334155;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: var(--accent);
+        }
+        .protocol-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-right: 10px;
+        }
+        .badge-tls { background: #0284c7; color: white; }
+        .badge-h2 { background: #059669; color: white; }
+        .badge-quic { background: #7c3aed; color: white; }
+        .badge-tcp { background: #ea580c; color: white; }
+        
+        .footer {
+            margin-top: 80px;
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--surface);
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Protocol Fuzzer Architecture</h1>
+            <p>A deep dive into the design, flows, and engines of the multi-protocol fuzzing suite.</p>
+        </header>
+
+        <section id="high-level">
+            <h2>1. System Overview</h2>
+            <p>The tool is designed as a modular fuzzer that abstracts protocol-specific complexities into specialized "Engines". A single scenario can be executed against various transport layers (TLS over TCP, TLS over QUIC, or raw HTTP/2 streams).</p>
+            
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    UI[Desktop GUI - Electron] --> |IPC| Main[Main Process - Node.js]
+    CLI[CLI Tool] --> Main
+    
+    subgraph Core
+        Main --> UC[Unified Client]
+        Main --> US[Unified Server]
+        UC --> SM[Scenario Manager]
+    end
+
+    subgraph Engines
+        UC --> TLS[TLS Fuzzer Engine]
+        UC --> H2[HTTP/2 Fuzzer Engine]
+        UC --> QUIC[QUIC Fuzzer Engine]
+        UC --> TCP[Raw TCP Engine]
+    end
+
+    Engines --> Target((Target Device / Firewall))
+                </div>
+            </div>
+        </section>
+
+        <section id="execution-flow">
+            <h2>2. Test Execution Flow</h2>
+            <p>Every test run follows a strict <strong>Plan -> Act -> Validate</strong> cycle. The fuzzer compares the target's behavior against a "Well-behaved" baseline (OpenSSL or Node.js native) to determine if a protocol violation was handled correctly.</p>
+            
+            <div class="diagram-card">
+                <div class="mermaid">
+sequenceDiagram
+    participant Runner as Unified Runner
+    participant Fuzzer as Fuzzed Engine
+    participant Target as Target Device
+    participant Baseline as Well-Behaved Engine
+
+    Runner->>Baseline: Run Baseline (Expected Behavior)
+    Baseline->>Target: Valid Handshake
+    Target-->>Baseline: Response (e.g. 200 OK)
+    Baseline-->>Runner: Log Result (PASSED)
+
+    Runner->>Fuzzer: Execute Scenario Actions
+    Fuzzer->>Target: Malformed Packet (The "Attack")
+    
+    alt Correct Behavior
+        Target-->>Fuzzer: Alert / Connection Drop
+        Fuzzer-->>Runner: Result (DROPPED)
+        Runner->>Runner: Grade: PASS (Robustness)
+    else Vulnerable / Crash
+        Target-->>Fuzzer: Illegal Response / Timeout
+        Fuzzer-->>Runner: Result (TIMEOUT/ERROR)
+        Runner->>Runner: Grade: FAIL (Security Risk)
+    end
+                </div>
+            </div>
+        </section>
+
+        <section id="quic-logic">
+            <h2>3. QUIC Implementation Matrix</h2>
+            <p>QUIC is unique because it requires complex state management. The fuzzer uses three distinct paths based on the testing goal:</p>
+            
+            <div class="diagram-card">
+                <div class="mermaid">
+graph LR
+    subgraph Stateless
+        A[Custom Packet Builder] -->|Hand-crafted| B(Initial Fuzzing)
+        B -->|Focus| C[Handshake Parsers]
+    end
+
+    subgraph Stateful
+        D[OpenSSL 3.6 Wrapper] -->|s_client| E(1-RTT Established)
+        E -->|Focus| F[HTTP/3 & App Layer]
+    end
+
+    subgraph Native
+        G[Quiche N-API] -->|Native Binary| H(Full State Machine)
+        H -->|Focus| I[Deep Protocol Fuzzing]
+    end
+                </div>
+            </div>
+            <p>
+                <span class="protocol-badge badge-quic">QUIC</span> 
+                <strong>Stateless:</strong> Best for raw byte mutations in Initial packets.<br>
+                <strong>OpenSSL:</strong> Best for testing application-layer resilience once the pipe is encrypted.<br>
+                <strong>Quiche:</strong> The high-performance, native path for full protocol compliance.
+            </p>
+        </section>
+
+        <section id="evasion">
+            <h2>4. PAN-PQC SNI Evasion Logic</h2>
+            <p>This advanced suite tests whether firewalls can correctly categorize URLs when the SNI is hidden or split across packets using large Post-Quantum Cryptography (PQC) payloads.</p>
+            
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    Start[Start ClientHello] --> Bloat[Add 1.5KB PQC Key Share]
+    Bloat --> Position{SNI Position?}
+    Position -->|End| Delayed[SNI pushed to offset 1600+]
+    Position -->|Split| MidSplit[Split domain in half: 'face' | 'book.com']
+
+    subgraph Fragmentation
+        Delayed --> Frag1[Packet 1: PQC Bloat Only]
+        Delayed --> Frag2[Packet 2: SNI Header]
+        
+        MidSplit --> S1[Packet 1: Half SNI]
+        MidSplit --> S2[Packet 2: Remaining SNI]
+    end
+
+    Frag2 --> FW{Firewall?}
+    S2 --> FW
+    FW -->|Missed| Pass((Categorization Failed))
+    FW -->|Caught| Block((Blocked Correctly))
+                </div>
+            </div>
+        </section>
+
+        <section id="distributed">
+            <h2>5. Distributed Architecture</h2>
+            <p>For large-scale infrastructure testing, the fuzzer can deploy agents across multiple regions to probe targets from diverse network paths.</p>
+            
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    Controller[Main Controller] -->|WebSocket/IPC| A1[Agent: AWS US-East]
+    Controller -->|WebSocket/IPC| A2[Agent: Azure Europe]
+    Controller -->|WebSocket/IPC| A3[Agent: GCP Asia]
+
+    A1 -->|Fuzz| Target((Enterprise Firewall))
+    A2 -->|Fuzz| Target
+    A3 -->|Fuzz| Target
+
+    A1 -.->|Report| Controller
+    A2 -.->|Report| Controller
+    A3 -.->|Report| Controller
+                </div>
+            </div>
+        </section>
+
+        <div class="footer">
+            Protocol Fuzzer Documentation &bull; Generated March 2026 &bull; Architecture v2.4
+        </div>
+    </div>
+</body>
+</html>
