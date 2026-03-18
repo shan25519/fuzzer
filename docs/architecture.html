@@ -71,6 +71,99 @@
         .badge-h2 { background: #059669; color: white; }
         .badge-quic { background: #7c3aed; color: white; }
         .badge-tcp { background: #ea580c; color: white; }
+
+        .callout {
+            border-radius: 10px;
+            padding: 20px 25px;
+            margin: 20px 0;
+            font-size: 1.05rem;
+        }
+        .callout-info {
+            background: #1e3a5f;
+            border-left: 4px solid var(--primary);
+        }
+        .callout-tip {
+            background: #1a3a2a;
+            border-left: 4px solid var(--success);
+        }
+        .callout-warn {
+            background: #3a2a1a;
+            border-left: 4px solid var(--warning);
+        }
+        .callout strong { color: var(--text); }
+        .callout p { margin: 5px 0; font-size: 1rem; }
+
+        .file-tree {
+            font-family: 'Courier New', monospace;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 20px 25px;
+            line-height: 1.8;
+            font-size: 0.95rem;
+            overflow-x: auto;
+        }
+        .file-tree .folder { color: var(--primary); font-weight: bold; }
+        .file-tree .file { color: var(--text-dim); }
+        .file-tree .hot { color: var(--warning); font-weight: bold; }
+        .file-tree .comment { color: #6e7681; font-style: italic; }
+
+        .step-grid {
+            display: grid;
+            grid-template-columns: 60px 1fr;
+            gap: 0;
+            margin: 25px 0;
+        }
+        .step-num {
+            background: var(--primary);
+            color: var(--bg);
+            font-weight: bold;
+            font-size: 1.3rem;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 5px;
+        }
+        .step-body {
+            padding: 5px 0 25px 10px;
+            border-left: 2px solid #334155;
+            margin-left: 22px;
+            padding-left: 25px;
+        }
+        .step-body:last-child { border-left-color: transparent; }
+        .step-body h4 { color: var(--text); margin: 0 0 8px 0; font-size: 1.1rem; }
+        .step-body p { margin: 0; font-size: 0.95rem; }
+
+        .analogy-card {
+            background: linear-gradient(135deg, #1e293b, #1a1a3e);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 25px;
+            margin: 15px 0;
+        }
+        .analogy-card h4 { color: var(--warning); margin: 0 0 10px 0; font-size: 1.1rem; }
+        .analogy-card p { margin: 0; font-size: 1rem; }
+
+        .code-block {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: var(--text);
+            overflow-x: auto;
+            line-height: 1.6;
+            white-space: pre;
+        }
+        .code-block .kw { color: #ff7b72; }
+        .code-block .str { color: #a5d6ff; }
+        .code-block .cm { color: #6e7681; }
+        .code-block .fn { color: #d2a8ff; }
+        .code-block .num { color: #79c0ff; }
         
         .matrix-table {
             width: 100%;
@@ -133,6 +226,861 @@
             <h1>Protocol Fuzzer Architecture</h1>
             <p>A deep dive into the design, flows, and engines of the multi-protocol fuzzing suite.</p>
         </header>
+
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
+        <!--  BEGINNER'S VISUAL GUIDE — Sections 0.x                           -->
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+        <section id="what-is-this">
+            <h2>0.1 What Is This Project?</h2>
+
+            <div class="callout callout-info">
+                <strong>One sentence:</strong>
+                <p>This is a <strong>security testing tool</strong> that deliberately sends broken, malicious, or weird network traffic to firewalls, servers, and other network devices to see if they handle it correctly.</p>
+            </div>
+
+            <div class="analogy-card">
+                <h4>Real-World Analogy</h4>
+                <p>Imagine you build a locked door. A <strong>fuzzer</strong> is a robot that tries every possible key shape, broken keys, keys made of rubber, keys that are 10 feet long, and keys on fire &mdash; to see if your lock breaks, jams, or accidentally opens. That's what this tool does, but for <strong>network protocols</strong> (TLS, HTTP/2, QUIC, TCP).</p>
+            </div>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph LR
+    subgraph "This Tool"
+        F["Fuzzer"]
+    end
+
+    subgraph "What It Sends"
+        Good["Valid traffic"]
+        Bad["Broken packets"]
+        Mal["Malware signatures"]
+        Edge["Edge cases"]
+    end
+
+    subgraph "What We're Testing"
+        FW["Firewall"]
+        SRV["TLS Server"]
+        LB["Load Balancer"]
+        IPS["Intrusion Prevention"]
+    end
+
+    F --> Good
+    F --> Bad
+    F --> Mal
+    F --> Edge
+
+    Good --> FW
+    Bad --> FW
+    Mal --> SRV
+    Edge --> LB
+    Bad --> IPS
+
+    FW --> |"Block or Allow?"| V{Verdict}
+    SRV --> V
+    LB --> V
+    IPS --> V
+
+    style F fill:#38bdf8,color:black,stroke:none
+    style V fill:#f472b6,color:black,stroke:none
+                </div>
+            </div>
+        </section>
+
+        <section id="nodejs-for-beginners">
+            <h2>0.2 Node.js — What You Need to Know</h2>
+
+            <p>If you've never used Node.js, here's the minimum context to understand this project.</p>
+
+            <div class="analogy-card">
+                <h4>What Is Node.js?</h4>
+                <p>Node.js lets you run <strong>JavaScript outside a web browser</strong>. Instead of making web pages interactive, we use it to open network sockets, send raw bytes over the wire, and manage multiple connections at once. Think of it as Python or Java but in JavaScript, running on the command line.</p>
+            </div>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    subgraph "Traditional JavaScript (Browser)"
+        B1["JavaScript in a web page"]
+        B2["Can: animate buttons, fetch APIs"]
+        B3["Cannot: open raw TCP sockets"]
+        B1 --- B2 --- B3
+    end
+
+    subgraph "Node.js (This Project)"
+        N1["JavaScript on the command line"]
+        N2["Can: open TCP/UDP sockets"]
+        N3["Can: read/write files, spawn processes"]
+        N4["Can: build custom TLS packets byte-by-byte"]
+        N1 --- N2 --- N3 --- N4
+    end
+
+    style B3 fill:#ef4444,color:white,stroke:none
+    style N2 fill:#10b981,color:white,stroke:none
+    style N3 fill:#10b981,color:white,stroke:none
+    style N4 fill:#10b981,color:white,stroke:none
+                </div>
+            </div>
+
+            <h3>Key Concepts (5-Minute Version)</h3>
+
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Concept</th><th>What It Means</th><th>How This Project Uses It</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>require()</code></td>
+                        <td>Imports code from another file (like Python's <code>import</code> or Java's <code>import</code>)</td>
+                        <td><code>const { buildClientHello } = require('./lib/handshake')</code> imports the function that builds a TLS ClientHello message</td>
+                    </tr>
+                    <tr>
+                        <td><code>module.exports</code></td>
+                        <td>Makes functions/variables available to other files</td>
+                        <td>Every scenario file exports its list of test cases so the main engine can find them</td>
+                    </tr>
+                    <tr>
+                        <td><code>Buffer</code></td>
+                        <td>A chunk of raw binary data (like a byte array in C/Java)</td>
+                        <td>Every network packet is built as a <code>Buffer</code> &mdash; e.g., <code>Buffer.from([0x16, 0x03, 0x01])</code> is a TLS record header</td>
+                    </tr>
+                    <tr>
+                        <td><code>async</code> / <code>await</code></td>
+                        <td>Run things that take time (network calls) without blocking</td>
+                        <td><code>await client.runScenario(scenario)</code> sends the fuzz, waits for a response, then moves on</td>
+                    </tr>
+                    <tr>
+                        <td><code>net.Socket</code></td>
+                        <td>A raw TCP connection (like a C socket)</td>
+                        <td>The TLS fuzzer opens a raw socket and writes hand-crafted TLS records &mdash; it does NOT use OpenSSL</td>
+                    </tr>
+                    <tr>
+                        <td><code>child_process.fork()</code></td>
+                        <td>Starts a new Node.js process (like <code>fork()</code> in C)</td>
+                        <td>The worker pool: main process forks N workers, each runs scenarios in parallel</td>
+                    </tr>
+                    <tr>
+                        <td><code>npm</code> / <code>package.json</code></td>
+                        <td>Node's package manager and project manifest (like pip + setup.py, or Maven + pom.xml)</td>
+                        <td><code>npm start</code> launches the Electron GUI, <code>npm run client</code> runs the CLI fuzzer</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="callout callout-tip">
+                <strong>You don't need to know JavaScript deeply.</strong>
+                <p>Most scenario files follow a pattern: define a name, a category, and a list of actions (send this, wait for that). If you can read a JSON object, you can read and write scenarios.</p>
+            </div>
+        </section>
+
+        <section id="electron-for-beginners">
+            <h2>0.3 Electron — The Desktop App Shell</h2>
+
+            <p><strong>Electron</strong> wraps a web page inside a desktop window. If you've used VS Code, Slack, or Discord &mdash; those are Electron apps. This project uses it for a point-and-click GUI that lets you pick scenarios and view results.</p>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    subgraph "Electron App = 3 Parts"
+        direction TB
+        subgraph "Main Process (main.js)"
+            MP["Node.js — full system access"]
+            MP2["Creates the window"]
+            MP3["Spawns fuzzer workers"]
+            MP --- MP2 --- MP3
+        end
+
+        subgraph "Preload Script (preload.js)"
+            PP["Security bridge"]
+            PP2["Exposes ONLY safe APIs"]
+            PP3["window.fuzzer.run()"]
+            PP --- PP2 --- PP3
+        end
+
+        subgraph "Renderer Process (renderer/)"
+            RP["HTML + CSS + JS"]
+            RP2["The UI you see"]
+            RP3["Cannot access filesystem"]
+            RP --- RP2 --- RP3
+        end
+    end
+
+    RP -->|"window.fuzzer.run()"| PP
+    PP -->|"ipcRenderer.invoke"| MP
+    MP -->|"fork worker, run tests"| Worker["Worker Process"]
+    Worker -->|"results via IPC"| MP
+    MP -->|"update UI"| RP
+
+    style MP fill:#38bdf8,color:black,stroke:none
+    style PP fill:#fbbf24,color:black,stroke:none
+    style RP fill:#818cf8,color:black,stroke:none
+    style Worker fill:#10b981,color:black,stroke:none
+                </div>
+            </div>
+
+            <div class="callout callout-info">
+                <strong>You don't need Electron to use the fuzzer.</strong>
+                <p>The CLI (<code>node client.js</code>, <code>node server.js</code>) does everything the GUI does. Electron is optional and only needed for the visual interface.</p>
+            </div>
+        </section>
+
+        <section id="project-file-map">
+            <h2>0.4 Project File Map — What Lives Where</h2>
+            <p>This project has ~45 JavaScript files. Here's the map, color-coded by what you'll actually need to touch.</p>
+
+            <div class="file-tree">
+<span class="folder">fuzzer/</span>
+├── <span class="file">package.json</span>             <span class="comment">← project manifest: dependencies, npm scripts</span>
+│
+├── <span class="folder">Entry Points (how you start the tool)</span>
+│   ├── <span class="file">main.js</span>              <span class="comment">← Electron GUI entry (npm start)</span>
+│   ├── <span class="file">preload.js</span>           <span class="comment">← Security bridge between GUI and Node.js</span>
+│   ├── <span class="file">client.js</span>            <span class="comment">← CLI client fuzzer (npm run client)</span>
+│   └── <span class="file">server.js</span>            <span class="comment">← CLI server fuzzer (npm run server)</span>
+│
+├── <span class="folder">renderer/</span>                <span class="comment">← Electron GUI files (HTML/CSS/JS)</span>
+│   ├── <span class="file">index.html</span>
+│   ├── <span class="file">styles.css</span>
+│   └── <span class="file">app.js</span>               <span class="comment">← 3000+ line UI controller</span>
+│
+├── <span class="folder">lib/</span>                     <span class="comment">← Core library (where all the action is)</span>
+│
+│   ├── <span class="folder">Scenario Definitions</span>  <span class="comment">← <span class="hot">EDIT THESE to add new tests</span></span>
+│   │   ├── <span class="hot">scenarios.js</span>         <span class="comment">← TLS scenarios (A–Z) — 187KB, 400+ tests</span>
+│   │   ├── <span class="hot">http2-scenarios.js</span>   <span class="comment">← HTTP/2 scenarios (AA–AO) — 92KB</span>
+│   │   ├── <span class="hot">quic-scenarios.js</span>    <span class="comment">← QUIC scenarios (QA–QL) — 47KB</span>
+│   │   ├── <span class="hot">tcp-scenarios.js</span>     <span class="comment">← Raw TCP scenarios (RA–RH) — 44KB</span>
+│   │   ├── <span class="hot">firewall-scenarios.js</span> <span class="comment">← Malware/virus payload tests (FW)</span>
+│   │   ├── <span class="hot">sandbox-scenarios.js</span>  <span class="comment">← Sandbox evasion tests (SB)</span>
+│   │   ├── <span class="file">scan-scenarios.js</span>    <span class="comment">← TLS compatibility scanning</span>
+│   │   ├── <span class="file">pan-sni-scenarios.js</span> <span class="comment">← PAN-OS URL category probes</span>
+│   │   └── <span class="file">pan-pqc-evasion.js</span>  <span class="comment">← PAN-OS post-quantum evasion</span>
+│   │
+│   ├── <span class="folder">Protocol Builders</span>     <span class="comment">← Low-level packet construction</span>
+│   │   ├── <span class="file">handshake.js</span>         <span class="comment">← TLS handshake message builders</span>
+│   │   ├── <span class="file">record.js</span>            <span class="comment">← TLS record wrappers</span>
+│   │   ├── <span class="file">constants.js</span>         <span class="comment">← Protocol enums (versions, ciphers, alerts)</span>
+│   │   ├── <span class="file">frame-generator.js</span>   <span class="comment">← HTTP/2 frame builders</span>
+│   │   ├── <span class="file">quic-packet.js</span>       <span class="comment">← QUIC packet builders</span>
+│   │   ├── <span class="file">x509.js</span>              <span class="comment">← Certificate field mutation</span>
+│   │   └── <span class="file">cert-gen.js</span>          <span class="comment">← Self-signed cert generation</span>
+│   │
+│   ├── <span class="folder">Execution Engines</span>     <span class="comment">← Run scenarios against targets</span>
+│   │   ├── <span class="file">unified-client.js</span>    <span class="comment">← Routes scenarios to correct protocol engine</span>
+│   │   ├── <span class="file">unified-server.js</span>    <span class="comment">← Server-side equivalent</span>
+│   │   ├── <span class="file">fuzzer-client.js</span>     <span class="comment">← TLS engine (raw TCP socket)</span>
+│   │   ├── <span class="file">http2-fuzzer-client.js</span> <span class="comment">← HTTP/2 engine</span>
+│   │   ├── <span class="file">quic-fuzzer-client.js</span>  <span class="comment">← QUIC engine (UDP)</span>
+│   │   └── <span class="file">raw-tcp.js</span>           <span class="comment">← Raw TCP engine (IP header construction)</span>
+│   │
+│   ├── <span class="folder">Workers & Agents</span>     <span class="comment">← Parallel execution and distributed mode</span>
+│   │   ├── <span class="file">ui-worker.js</span>         <span class="comment">← Electron subprocess</span>
+│   │   ├── <span class="file">agent.js</span>             <span class="comment">← HTTP control server for remote agents</span>
+│   │   ├── <span class="file">agent-worker.js</span>      <span class="comment">← Agent subprocess</span>
+│   │   └── <span class="file">controller.js</span>        <span class="comment">← Client for controlling remote agents</span>
+│   │
+│   ├── <span class="folder">Analysis</span>             <span class="comment">← Grading and compliance checking</span>
+│   │   ├── <span class="file">grader.js</span>            <span class="comment">← Pass/fail/warn grading logic</span>
+│   │   ├── <span class="file">baseline.js</span>          <span class="comment">← OpenSSL reference comparison</span>
+│   │   └── <span class="file">protocol-compliance.js</span> <span class="comment">← RFC compliance checks</span>
+│   │
+│   └── <span class="folder">Utilities</span>
+│       ├── <span class="file">logger.js</span>            <span class="comment">← Color console output + event streaming</span>
+│       ├── <span class="file">pcap-writer.js</span>       <span class="comment">← Wireshark-compatible packet capture</span>
+│       ├── <span class="file">well-behaved-server.js</span> <span class="comment">← Echo server for payload testing</span>
+│       └── <span class="file">well-behaved-client.js</span> <span class="comment">← Compliant client for server testing</span>
+│
+└── <span class="folder">docs/</span>
+    └── <span class="file">architecture.html</span>    <span class="comment">← This file</span>
+            </div>
+
+            <div class="callout callout-warn">
+                <strong>Highlighted in yellow = the files you edit to add new test cases.</strong>
+                <p>You will almost never need to touch the engine, worker, or analysis files. Scenarios are self-contained.</p>
+            </div>
+        </section>
+
+        <section id="how-a-test-runs">
+            <h2>0.5 How a Test Runs — End to End</h2>
+            <p>Follow a single test case from "click Run" to "see the verdict."</p>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TD
+    A["You: select scenario + click Run"] --> B["client.js: loads scenario from scenarios.js"]
+    B --> C["UnifiedClient: looks at category prefix"]
+    C --> D{"Which protocol?"}
+
+    D -->|"A–Z, FW, SB"| E["FuzzerClient: opens raw TCP socket"]
+    D -->|"AA–AO"| F["Http2FuzzerClient: opens TLS+ALPN h2"]
+    D -->|"QA–QL"| G["QuicFuzzerClient: opens UDP socket"]
+    D -->|"RA–RH"| H["RawTCPClient: builds IP+TCP headers"]
+
+    E --> I["Executes scenario actions: send → recv → send → ..."]
+    F --> I
+    G --> I
+    H --> I
+
+    I --> J["Collects server response"]
+    J --> K{"Does response match expected?"}
+
+    K -->|"Yes"| L["Verdict: AS EXPECTED ✓"]
+    K -->|"No"| M["Verdict: UNEXPECTED ⚠"]
+
+    L --> N["Result added to report"]
+    M --> N
+    N --> O["Grade computed: A through F"]
+
+    style A fill:#38bdf8,color:black,stroke:none
+    style D fill:#818cf8,color:black,stroke:none
+    style K fill:#f472b6,color:black,stroke:none
+    style L fill:#10b981,color:black,stroke:none
+    style M fill:#fbbf24,color:black,stroke:none
+    style O fill:#ef4444,color:white,stroke:none
+                </div>
+            </div>
+        </section>
+
+        <section id="routing-explained">
+            <h2>0.6 Scenario Routing — How the Engine Picks the Right Protocol</h2>
+            <p>Every scenario has a <code>category</code> field (like <code>"A"</code> or <code>"AA"</code> or <code>"QA"</code>). The <code>UnifiedClient</code> looks at this prefix to decide which protocol engine to use. You never have to tell it &mdash; it routes automatically.</p>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph LR
+    subgraph "Your Scenario"
+        S["{ name: 'my-test', category: 'A', ... }"]
+    end
+
+    S --> UC["UnifiedClient.runScenario()"]
+
+    UC --> R{"category prefix?"}
+
+    R -->|"Single letter A–Z, or FV, FW, SB, PAN, SCAN"| TLS["FuzzerClient — Raw TLS"]
+    R -->|"Two letters AA–AO, AM, AN, H2S"| H2["Http2FuzzerClient — HTTP/2"]
+    R -->|"Starts with Q: QA–QL, QS, QSCAN"| QUIC["QuicFuzzerClient — QUIC/UDP"]
+    R -->|"Starts with R: RA–RH"| TCP["RawTCPClient — IP+TCP"]
+
+    TLS --> T1["Opens net.Socket to target"]
+    TLS --> T2["Writes hand-crafted TLS records"]
+    TLS --> T3["No OpenSSL — pure JavaScript bytes"]
+
+    H2 --> H1["Opens tls.connect with ALPN: h2"]
+    H2 --> H2a["Sends HTTP/2 frames"]
+
+    QUIC --> Q1["Opens dgram UDP socket"]
+    QUIC --> Q2["Sends QUIC Initial packets"]
+
+    TCP --> TC1["Opens raw-socket"]
+    TCP --> TC2["Builds IP + TCP headers manually"]
+
+    style R fill:#818cf8,color:black,stroke:none
+    style TLS fill:#0284c7,color:white,stroke:none
+    style H2 fill:#059669,color:white,stroke:none
+    style QUIC fill:#7c3aed,color:white,stroke:none
+    style TCP fill:#ea580c,color:white,stroke:none
+                </div>
+            </div>
+
+            <h3>Routing Lookup Table</h3>
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Category</th><th>Protocol</th><th>Engine File</th><th>Transport</th><th>What It Does</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>A</code> through <code>Z</code></td>
+                        <td><span class="protocol-badge badge-tls">TLS</span></td>
+                        <td><code>lib/fuzzer-client.js</code></td>
+                        <td>Raw TCP socket</td>
+                        <td>Sends hand-built TLS records (ClientHello, alerts, etc.) byte-by-byte</td>
+                    </tr>
+                    <tr>
+                        <td><code>FV</code>, <code>FW</code>, <code>SB</code></td>
+                        <td><span class="protocol-badge badge-tls">TLS</span></td>
+                        <td><code>lib/unified-client.js</code> (Node TLS)</td>
+                        <td>Node.js <code>tls.connect()</code></td>
+                        <td>Uses real TLS to send HTTP payloads (malware, sandbox content)</td>
+                    </tr>
+                    <tr>
+                        <td><code>SCAN</code>, <code>PAN</code></td>
+                        <td><span class="protocol-badge badge-tls">TLS</span></td>
+                        <td><code>lib/unified-client.js</code> (Node TLS)</td>
+                        <td>Node.js <code>tls.connect()</code></td>
+                        <td>Compatibility scanning and URL category probing</td>
+                    </tr>
+                    <tr>
+                        <td><code>AA</code> through <code>AO</code></td>
+                        <td><span class="protocol-badge badge-h2">HTTP/2</span></td>
+                        <td><code>lib/http2-fuzzer-client.js</code></td>
+                        <td>TLS + ALPN h2</td>
+                        <td>Sends malformed HTTP/2 frames (Rapid Reset, CONTINUATION flood)</td>
+                    </tr>
+                    <tr>
+                        <td><code>AM</code>, <code>AN</code>, <code>AO</code></td>
+                        <td><span class="protocol-badge badge-h2">HTTP/2</span></td>
+                        <td><code>lib/unified-client.js</code> (Node H2)</td>
+                        <td>Node.js <code>http2.connect()</code></td>
+                        <td>Validation/firewall/sandbox tests over real HTTP/2 sessions</td>
+                    </tr>
+                    <tr>
+                        <td><code>QA</code> through <code>QL</code></td>
+                        <td><span class="protocol-badge badge-quic">QUIC</span></td>
+                        <td><code>lib/quic-fuzzer-client.js</code></td>
+                        <td>UDP socket</td>
+                        <td>Sends raw QUIC packets, or uses OpenSSL/quiche for stateful tests</td>
+                    </tr>
+                    <tr>
+                        <td><code>RA</code> through <code>RH</code></td>
+                        <td><span class="protocol-badge badge-tcp">TCP</span></td>
+                        <td><code>lib/raw-tcp.js</code></td>
+                        <td>Raw IP socket</td>
+                        <td>Builds custom IP+TCP headers (SYN flood, RST injection, XMAS scan)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="adding-a-test-case">
+            <h2>0.7 How to Add a New Test Case</h2>
+            <p>This is the most common task. Here's the step-by-step process for each protocol.</p>
+
+            <h3>Adding a TLS Scenario (most common)</h3>
+
+            <div class="step-grid">
+                <div><div class="step-num">1</div></div>
+                <div class="step-body">
+                    <h4>Open <code>lib/scenarios.js</code></h4>
+                    <p>Find the category section you want to add to (e.g., <code>// ===== Category A: Handshake Order Violations =====</code>). All scenarios are in a single array called <code>SCENARIOS</code>.</p>
+                </div>
+
+                <div><div class="step-num">2</div></div>
+                <div class="step-body">
+                    <h4>Add your scenario object</h4>
+                    <p>Copy this template and modify it:</p>
+
+                    <div class="code-block">{
+  <span class="cm">// Unique name — used in CLI: --scenario my-new-test</span>
+  <span class="kw">name</span>: <span class="str">'my-new-test'</span>,
+
+  <span class="cm">// Category letter determines: routing, severity, grading</span>
+  <span class="kw">category</span>: <span class="str">'A'</span>,
+
+  <span class="cm">// Human-readable description</span>
+  <span class="kw">description</span>: <span class="str">'Send Certificate before ClientHello'</span>,
+
+  <span class="cm">// 'client' = we initiate connection, 'server' = we listen</span>
+  <span class="kw">side</span>: <span class="str">'client'</span>,
+
+  <span class="cm">// List of actions — this is where the fuzz logic lives</span>
+  <span class="kw">actions</span>: (opts) => [
+    <span class="cm">// Step 1: Send a Certificate message (illegal — should come from server)</span>
+    { <span class="kw">type</span>: <span class="str">'send'</span>,
+      <span class="kw">data</span>: hs.<span class="fn">buildCertificate</span>([someCertBuffer]),
+      <span class="kw">label</span>: <span class="str">'[FUZZ] Certificate (before ClientHello)'</span> },
+
+    <span class="cm">// Step 2: Wait up to 3 seconds for the server to respond</span>
+    { <span class="kw">type</span>: <span class="str">'recv'</span>, <span class="kw">timeout</span>: <span class="num">3000</span> },
+  ],
+
+  <span class="cm">// What should happen: 'DROPPED' = server rejects, 'PASSED' = server accepts</span>
+  <span class="kw">expected</span>: <span class="str">'DROPPED'</span>,
+}</div>
+                </div>
+
+                <div><div class="step-num">3</div></div>
+                <div class="step-body">
+                    <h4>Test it</h4>
+                    <p>Run your new scenario against a target:</p>
+                    <div class="code-block"><span class="cm"># Run just your new test</span>
+node client.js example.com 443 --scenario my-new-test --verbose
+
+<span class="cm"># Run all tests in the same category</span>
+node client.js example.com 443 --category A</div>
+                </div>
+
+                <div><div class="step-num">4</div></div>
+                <div class="step-body" style="border-left-color: transparent;">
+                    <h4>Done!</h4>
+                    <p>No other files need editing. The routing, grading, GUI display, PCAP recording, and distributed mode all pick up your new scenario automatically.</p>
+                </div>
+            </div>
+
+            <h3>Available Action Types</h3>
+            <p>These are the building blocks for every scenario. Mix and match them to create your test:</p>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph LR
+    subgraph "Sending Data"
+        send["send: write bytes to socket"]
+        slowDrip["slowDrip: send 1 byte at a time"]
+        fragment["fragment: split into N chunks"]
+    end
+
+    subgraph "Receiving Data"
+        recv["recv: wait for response (with timeout)"]
+        validate["validate: check TLS message types"]
+    end
+
+    subgraph "Connection Control"
+        delay["delay: sleep N milliseconds"]
+        fin["fin: send TCP FIN (half-close)"]
+        rst["rst: send TCP RST (abort)"]
+    end
+
+    subgraph "Your Scenario"
+        S["actions: send → recv → send → fin"]
+    end
+
+    S --> send
+    S --> recv
+    S --> delay
+    S --> fin
+
+    style send fill:#38bdf8,color:black,stroke:none
+    style recv fill:#fbbf24,color:black,stroke:none
+    style delay fill:#94a3b8,color:black,stroke:none
+    style fin fill:#ef4444,color:white,stroke:none
+    style slowDrip fill:#22d3ee,color:black,stroke:none
+    style fragment fill:#818cf8,color:black,stroke:none
+    style rst fill:#ef4444,color:white,stroke:none
+    style validate fill:#10b981,color:black,stroke:none
+                </div>
+            </div>
+
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Action</th><th>Parameters</th><th>Example</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>send</code></td>
+                        <td><code>data</code>: Buffer, <code>label</code>: string</td>
+                        <td><code>{ type: 'send', data: hs.buildClientHello(), label: 'ClientHello' }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>recv</code></td>
+                        <td><code>timeout</code>: ms (default: 5000)</td>
+                        <td><code>{ type: 'recv', timeout: 3000 }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>delay</code></td>
+                        <td><code>ms</code>: milliseconds</td>
+                        <td><code>{ type: 'delay', ms: 1000 }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>fin</code></td>
+                        <td><code>label</code>: string (optional)</td>
+                        <td><code>{ type: 'fin', label: 'Close connection' }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>rst</code></td>
+                        <td><code>label</code>: string (optional)</td>
+                        <td><code>{ type: 'rst', label: 'Abort connection' }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>slowDrip</code></td>
+                        <td><code>data</code>: Buffer, <code>bytesPerChunk</code>: number, <code>delayMs</code>: ms</td>
+                        <td><code>{ type: 'slowDrip', data: payload, bytesPerChunk: 1, delayMs: 100 }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>fragment</code></td>
+                        <td><code>data</code>: Buffer, <code>fragments</code>: count, <code>delayMs</code>: ms</td>
+                        <td><code>{ type: 'fragment', data: clientHello, fragments: 5, delayMs: 200 }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>validate</code></td>
+                        <td><code>expectedTypes</code>: array of HandshakeType values</td>
+                        <td><code>{ type: 'validate', expectedTypes: [HandshakeType.SERVER_HELLO] }</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Adding a Firewall/Sandbox Payload (even easier)</h3>
+            <p>Firewall and sandbox scenarios are simpler &mdash; you just add a payload object. No action list needed.</p>
+
+            <div class="code-block"><span class="cm">// In lib/firewall-scenarios.js → PAYLOADS array, add:</span>
+{
+  <span class="kw">id</span>: <span class="str">'my-new-payload'</span>,           <span class="cm">// scenario name becomes fw-my-new-payload</span>
+  <span class="kw">name</span>: <span class="str">'My custom exploit signature'</span>,
+  <span class="kw">description</span>: <span class="str">'Tests detection of XYZ attack pattern'</span>,
+  <span class="kw">data</span>: <span class="str">'the malicious string or Buffer'</span>,  <span class="cm">// sent as HTTP POST body</span>
+  <span class="kw">severity</span>: <span class="str">'high'</span>,               <span class="cm">// critical | high | medium</span>
+}</div>
+            <p>That's it. The generator function wraps it in HTTP POST logic, TLS connection, and grading automatically. An equivalent HTTP/2 scenario (<code>h2-fw-my-new-payload</code>) is also generated for free.</p>
+
+            <h3>Adding an HTTP/2 Scenario</h3>
+            <div class="code-block"><span class="cm">// In lib/http2-scenarios.js → find the category section, add:</span>
+{
+  <span class="kw">name</span>: <span class="str">'h2-my-frame-attack'</span>,
+  <span class="kw">category</span>: <span class="str">'AD'</span>,                    <span class="cm">// Frame Structure & Header Attacks</span>
+  <span class="kw">description</span>: <span class="str">'Send DATA frame on stream 0'</span>,
+  <span class="kw">side</span>: <span class="str">'client'</span>,
+  <span class="kw">actions</span>: (opts) => [
+    { <span class="kw">type</span>: <span class="str">'send'</span>, <span class="kw">data</span>: fg.<span class="fn">buildDataFrame</span>(<span class="num">0</span>, Buffer.from(<span class="str">'test'</span>)),
+      <span class="kw">label</span>: <span class="str">'[FUZZ] DATA on stream 0'</span> },
+    { <span class="kw">type</span>: <span class="str">'recv'</span>, <span class="kw">timeout</span>: <span class="num">3000</span> },
+  ],
+  <span class="kw">expected</span>: <span class="str">'DROPPED'</span>,
+}</div>
+
+            <h3>Adding a QUIC Scenario</h3>
+            <div class="code-block"><span class="cm">// In lib/quic-scenarios.js → find the category section, add:</span>
+{
+  <span class="kw">name</span>: <span class="str">'quic-zero-length-cid'</span>,
+  <span class="kw">category</span>: <span class="str">'QA'</span>,                    <span class="cm">// Handshake & Connection Initial</span>
+  <span class="kw">description</span>: <span class="str">'Initial packet with zero-length DCID'</span>,
+  <span class="kw">side</span>: <span class="str">'client'</span>,
+  <span class="kw">actions</span>: (opts) => [
+    { <span class="kw">type</span>: <span class="str">'send'</span>, <span class="kw">data</span>: pb.<span class="fn">buildInitialPacket</span>({ dcid: Buffer.alloc(<span class="num">0</span>) }),
+      <span class="kw">label</span>: <span class="str">'[FUZZ] Initial with empty DCID'</span> },
+    { <span class="kw">type</span>: <span class="str">'recv'</span>, <span class="kw">timeout</span>: <span class="num">3000</span> },
+  ],
+  <span class="kw">expected</span>: <span class="str">'DROPPED'</span>,
+}</div>
+        </section>
+
+        <section id="helper-functions">
+            <h2>0.8 Packet Builder Cheat Sheet</h2>
+            <p>When writing scenarios, you use helper functions to build protocol messages. You don't write raw bytes &mdash; you call functions that return <code>Buffer</code> objects.</p>
+
+            <h3>TLS Helpers (<code>lib/handshake.js</code> + <code>lib/record.js</code>)</h3>
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Function</th><th>What It Builds</th><th>Usage</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>hs.buildClientHello(opts)</code></td>
+                        <td>TLS ClientHello (the first message in every TLS handshake)</td>
+                        <td>opts: <code>{ hostname, version, cipherSuites, extensions }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>hs.buildServerHello(opts)</code></td>
+                        <td>TLS ServerHello (server's response)</td>
+                        <td>opts: <code>{ version, cipherSuite, sessionId }</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>hs.buildFinished()</code></td>
+                        <td>TLS Finished message</td>
+                        <td>Typically sent out of order to test state machine</td>
+                    </tr>
+                    <tr>
+                        <td><code>hs.buildCertificate(certs)</code></td>
+                        <td>TLS Certificate message</td>
+                        <td>Takes array of DER-encoded cert Buffers</td>
+                    </tr>
+                    <tr>
+                        <td><code>buildAlert(level, desc)</code></td>
+                        <td>TLS Alert record</td>
+                        <td><code>buildAlert(AlertLevel.FATAL, AlertDescription.DECODE_ERROR)</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>buildChangeCipherSpec()</code></td>
+                        <td>TLS ChangeCipherSpec record</td>
+                        <td>Used to test CCS injection attacks</td>
+                    </tr>
+                    <tr>
+                        <td><code>buildRecord(type, data, ver)</code></td>
+                        <td>Wraps any data in a TLS record envelope</td>
+                        <td><code>buildRecord(ContentType.HANDSHAKE, payload, Version.TLS_1_2)</code></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>HTTP/2 Helpers (<code>lib/frame-generator.js</code>)</h3>
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Function</th><th>What It Builds</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>fg.buildSettingsFrame(params)</code></td><td>SETTINGS frame with key-value pairs</td></tr>
+                    <tr><td><code>fg.buildHeadersFrame(streamId, headers)</code></td><td>HEADERS frame with HPACK-encoded headers</td></tr>
+                    <tr><td><code>fg.buildDataFrame(streamId, payload)</code></td><td>DATA frame with body payload</td></tr>
+                    <tr><td><code>fg.buildRstStreamFrame(streamId, errorCode)</code></td><td>RST_STREAM to cancel a stream</td></tr>
+                    <tr><td><code>fg.buildGoawayFrame(lastStreamId, errorCode)</code></td><td>GOAWAY to shut down connection</td></tr>
+                    <tr><td><code>fg.buildWindowUpdateFrame(streamId, increment)</code></td><td>WINDOW_UPDATE for flow control</td></tr>
+                    <tr><td><code>fg.buildPingFrame(opaqueData)</code></td><td>PING frame for keep-alive/measurement</td></tr>
+                    <tr><td><code>fg.buildContinuationFrame(streamId, data)</code></td><td>CONTINUATION for split headers</td></tr>
+                    <tr><td><code>fg.connectionPreface()</code></td><td>HTTP/2 connection preface string</td></tr>
+                </tbody>
+            </table>
+
+            <h3>QUIC Helpers (<code>lib/quic-packet.js</code>)</h3>
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>Function</th><th>What It Builds</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>pb.buildInitialPacket(opts)</code></td><td>QUIC Initial packet (long header) with CRYPTO frame</td></tr>
+                    <tr><td><code>pb.buildHandshakePacket(opts)</code></td><td>QUIC Handshake packet</td></tr>
+                    <tr><td><code>pb.buildZeroRTTPacket(opts)</code></td><td>QUIC 0-RTT packet</td></tr>
+                    <tr><td><code>encodeVarInt(value)</code></td><td>RFC 9000 variable-length integer encoding</td></tr>
+                    <tr><td><code>protectPacket(header, payload, pn, pnLen, keys)</code></td><td>AEAD-encrypts and header-protects a QUIC packet</td></tr>
+                    <tr><td><code>deriveInitialKeys(dcid, version)</code></td><td>Derives encryption keys from connection ID</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="big-picture-flow">
+            <h2>0.9 The Big Picture — All Pieces Together</h2>
+            <p>This diagram shows how every component connects &mdash; from the user interface down to the wire.</p>
+
+            <div class="diagram-card">
+                <div class="mermaid">
+graph TB
+    subgraph "User Interfaces"
+        GUI["Electron GUI<br/>(main.js + renderer/)"]
+        CLI["CLI<br/>(client.js / server.js)"]
+        DIST["Distributed Agents<br/>(agent.js + controller.js)"]
+    end
+
+    subgraph "Orchestration Layer"
+        UC["UnifiedClient<br/>(lib/unified-client.js)"]
+        US["UnifiedServer<br/>(lib/unified-server.js)"]
+    end
+
+    subgraph "Scenario Database"
+        STLS["TLS Scenarios<br/>lib/scenarios.js<br/>Categories A–Z, FV, FW, SB"]
+        SH2["HTTP/2 Scenarios<br/>lib/http2-scenarios.js<br/>Categories AA–AO"]
+        SQ["QUIC Scenarios<br/>lib/quic-scenarios.js<br/>Categories QA–QL"]
+        STCP["TCP Scenarios<br/>lib/tcp-scenarios.js<br/>Categories RA–RH"]
+    end
+
+    subgraph "Protocol Builders"
+        BHS["handshake.js<br/>record.js<br/>constants.js"]
+        BFG["frame-generator.js"]
+        BQP["quic-packet.js"]
+        BRT["raw-tcp.js"]
+    end
+
+    subgraph "Protocol Engines"
+        EFC["FuzzerClient<br/>(raw TCP + TLS records)"]
+        EH2["Http2FuzzerClient<br/>(TLS + HTTP/2 frames)"]
+        EQC["QuicFuzzerClient<br/>(UDP + QUIC packets)"]
+        ETC["RawTCPClient<br/>(IP + TCP headers)"]
+    end
+
+    subgraph "Worker Pool"
+        WP["Primary Process<br/>→ fork() N Workers<br/>→ work-stealing queue"]
+    end
+
+    subgraph "Analysis"
+        GR["Grader<br/>(lib/grader.js)"]
+        BL["Baseline<br/>(lib/baseline.js)"]
+        LOG["Logger + PCAP<br/>(lib/logger.js, pcap-writer.js)"]
+    end
+
+    GUI --> WP
+    CLI --> WP
+    DIST --> WP
+    WP --> UC
+    WP --> US
+
+    UC --> STLS
+    UC --> SH2
+    UC --> SQ
+    UC --> STCP
+
+    STLS --> EFC
+    SH2 --> EH2
+    SQ --> EQC
+    STCP --> ETC
+
+    EFC --> BHS
+    EH2 --> BFG
+    EQC --> BQP
+    ETC --> BRT
+
+    EFC --> TARGET((Target))
+    EH2 --> TARGET
+    EQC --> TARGET
+    ETC --> TARGET
+
+    TARGET --> GR
+    GR --> LOG
+
+    style GUI fill:#818cf8,color:black,stroke:none
+    style CLI fill:#38bdf8,color:black,stroke:none
+    style DIST fill:#22d3ee,color:black,stroke:none
+    style UC fill:#f472b6,color:black,stroke:none
+    style US fill:#f472b6,color:black,stroke:none
+    style WP fill:#10b981,color:black,stroke:none
+    style TARGET fill:#ef4444,color:white,stroke:none
+    style GR fill:#fbbf24,color:black,stroke:none
+                </div>
+            </div>
+
+            <div class="callout callout-tip">
+                <strong>Key takeaway for contributors:</strong>
+                <p>To add a new test, you only touch the <strong>Scenario Database</strong> layer (the yellow-highlighted files in the file map above). Everything else &mdash; routing, execution, grading, logging, GUI display &mdash; is automatic.</p>
+            </div>
+        </section>
+
+        <section id="running-cheat-sheet">
+            <h2>0.10 Quick Reference — How to Run Things</h2>
+
+            <table class="matrix-table">
+                <thead>
+                    <tr><th>What You Want to Do</th><th>Command</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Start the GUI</td>
+                        <td><code>npm start</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run all TLS tests against a target</td>
+                        <td><code>node client.js example.com 443 --scenario all</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run one specific test</td>
+                        <td><code>node client.js example.com 443 --scenario out-of-order-finished-first</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run all tests in a category</td>
+                        <td><code>node client.js example.com 443 --category A</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run HTTP/2 tests</td>
+                        <td><code>node client.js example.com 443 --category AA --protocol h2</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run QUIC tests</td>
+                        <td><code>node client.js example.com 443 --category QA --protocol quic</code></td>
+                    </tr>
+                    <tr>
+                        <td>See hex dumps of all packets</td>
+                        <td><code>node client.js example.com 443 --scenario my-test --verbose</code></td>
+                    </tr>
+                    <tr>
+                        <td>Save PCAP for Wireshark</td>
+                        <td><code>node client.js example.com 443 --scenario all --pcap capture.pcap</code></td>
+                    </tr>
+                    <tr>
+                        <td>Use 8 parallel workers</td>
+                        <td><code>node client.js example.com 443 --scenario all --workers 8</code></td>
+                    </tr>
+                    <tr>
+                        <td>Start a distributed client agent</td>
+                        <td><code>node client.js --control-port 9200</code></td>
+                    </tr>
+                    <tr>
+                        <td>Start a distributed server agent</td>
+                        <td><code>node server.js --control-port 9201</code></td>
+                    </tr>
+                    <tr>
+                        <td>Run server-side fuzz scenarios</td>
+                        <td><code>node server.js 4433 --scenario all --hostname evil.test</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
+        <!--  EXISTING TECHNICAL DEEP-DIVE SECTIONS                            -->
+        <!-- ═══════════════════════════════════════════════════════════════════ -->
 
         <section id="high-level">
             <h2>1. System Architecture</h2>
@@ -1091,7 +2039,7 @@ graph LR
         </section>
 
         <div class="footer">
-            Protocol Fuzzer Documentation &bull; Generated March 2026 &bull; Architecture v3.0
+            Protocol Fuzzer Documentation &bull; Generated March 2026 &bull; Architecture v4.0
         </div>
     </div>
 </body>
