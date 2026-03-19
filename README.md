@@ -10,7 +10,7 @@ Supports three interfaces: **Electron GUI**, **CLI**, and **distributed mode** w
 
 ## Requirements
 
-- **Node.js** 18 or later
+- **Node.js** 24 or later (required for QUIC/HTTP3 via quiche; TLS and HTTP/2 work on Node 18+)
 - **Electron** 40+ (only needed for the GUI)
 - **npm** (for dependency installation)
 
@@ -24,11 +24,50 @@ npm install
 
 | Package | Purpose |
 |---------|---------|
+| `@currentspace/http3` | QUIC/HTTP3 client and server powered by Cloudflare quiche + BoringSSL |
 | `xml2js` | XML parsing for PAN-OS firewall integration (DUT mode) |
 | `raw-socket` | Raw TCP socket access for TCP-level fuzzing (optional, Linux only) |
 | `electron` | GUI application framework (dev dependency) |
 
 All protocol handling (TLS, HTTP/2 frames, QUIC packets, X.509 certificates) is implemented in pure JavaScript. The `raw-socket` module is optional — if unavailable, raw TCP scenarios are skipped and all other protocols work normally.
+
+### QUIC/HTTP3 Native Library
+
+The `@currentspace/http3` package provides a full QUIC+TLS 1.3 stack via Cloudflare's **quiche** engine with **BoringSSL** statically compiled into a single native binary. No system-level installation of quiche or BoringSSL is required — everything is self-contained in the `.node` addon.
+
+**Prebuilt binaries are included for all major platforms:**
+
+| Platform | Binary | Size |
+|----------|--------|------|
+| macOS ARM64 (Apple Silicon) | `http3.darwin-arm64.node` | 3.6 MB |
+| macOS x64 (Intel) | `http3.darwin-x64.node` | — |
+| Linux x64 (glibc — Ubuntu, Debian, Fedora, RHEL) | `http3.linux-x64-gnu.node` | 4.7 MB |
+| Linux ARM64 (glibc — AWS Graviton, etc.) | `http3.linux-arm64-gnu.node` | 4.3 MB |
+| Linux x64 (musl — Alpine, Docker alpine) | `http3.linux-x64-musl.node` | — |
+| Linux ARM64 (musl) | `http3.linux-arm64-musl.node` | — |
+| Windows x64 | `http3.win32-x64-msvc.node` | — |
+
+The loader auto-detects platform, architecture, and libc variant (glibc vs musl on Linux). On any supported platform, `npm install` pulls the correct binary automatically.
+
+**Running on Linux (Ubuntu and similar):**
+
+```bash
+# Install Node.js 24+
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
+sudo apt-get install -y nodejs
+
+# Clone and install — prebuilt quiche binary is pulled automatically
+git clone <repo-url>
+cd fuzzer
+npm install
+
+# Verify QUIC works
+node test-quiche.js
+```
+
+No Rust compiler, no C toolchain, no system libraries needed. The same `npm install` works on macOS (ARM64 and x64), Linux (x64 and ARM64, glibc and musl), and Windows.
+
+If `@currentspace/http3` is not installed or fails to load, the fuzzer gracefully falls back to its built-in raw UDP packet builder for QUIC Initial packet fuzzing. Full QUIC connection lifecycle (handshake completion, multi-stream data exchange, flow control) requires the quiche library.
 
 ---
 
@@ -95,26 +134,17 @@ npm start
 
 **Features:** Initial/Handshake/0-RTT packet fuzzing, transport parameter manipulation, connection migration, PQC keyshare testing, server-to-client attacks.
 
-**Post-Handshake Fuzzing (Application Layer):** The fuzzer utilizes OpenSSL 3.6+ (`s_client`) to handle the complex cryptographic state machine of the TLS 1.3 handshake over QUIC. Once the 1-RTT stream is established, the fuzzer can inject malformed HTTP/3 application data, exhaust idle timeouts, or flood streams.
+**Post-Handshake Fuzzing (Application Layer):** With quiche installed, the fuzzer has a full QUIC+TLS 1.3 state machine. Once the handshake completes and 1-RTT keys are established, the fuzzer can open multiple application streams, exchange HTTP/3 data, inject malformed application payloads, exhaust idle timeouts, or flood streams.
 
-#### Deep Protocol Fuzzing (quiche integration)
+#### QUIC Implementation Layers
 
-If you need to fuzz the **QUIC protocol itself** *after* the handshake (e.g., mutating `MAX_STREAMS`, `ACK` blocks, or `CONNECTION_CLOSE` frames), or if you want a fully compliant, self-contained state machine without relying on external binaries like OpenSSL, you can use **quiche** (Cloudflare's native QUIC library).
+The fuzzer uses two complementary QUIC implementations:
 
-By default, the fuzzer uses its custom, stateless packet builder for `Initial` packet fuzzing and falls back to `openssl s_client -quic` for stateful tests. However, the fuzzer is designed to detect and utilize `quiche` if it is installed.
+1. **Quiche (full stack):** When `@currentspace/http3` is installed, the fuzzer uses Cloudflare's quiche engine for well-behaved client/server operations. This provides complete TLS 1.3 handshake, multi-stream multiplexing, flow control, congestion control, and HTTP/3 pseudo-header semantics — matching the same pattern as the HTTP/2 implementation (which uses Node's built-in `http2` module).
 
-**How to install and enable `quiche`:**
+2. **Raw UDP (fuzzing):** For attack scenarios, the fuzzer uses its custom packet builder over raw UDP sockets (`dgram`). This allows crafting arbitrary malformed QUIC packets, invalid Initial frames, and protocol violations that a compliant library like quiche would refuse to send.
 
-You do not need a C/Rust compiler to use quiche. You can install a prebuilt N-API wrapper that downloads the correct binary for your OS/Architecture:
-
-```bash
-# Install the prebuilt quiche wrapper
-npm install @currentspace/http3
-```
-
-When this package is present in `node_modules`, the fuzzer will automatically switch modes:
-1. **All QUIC tests** (fuzzing and well-behaved counterparts) will route through the `quiche` state machine instead of the stateless UDP builder.
-2. It allows for deep protocol fuzzing by exposing hooks to mutate serialized frames just before AES-GCM encryption is applied.
+When quiche is available, the fuzzer automatically routes well-behaved baselines and post-handshake scenarios through the quiche stack, while continuing to use raw UDP for malformed packet injection.
 
 ### Raw TCP (Categories RA-RH)
 
@@ -160,11 +190,11 @@ The fuzzer's client and server are standalone components that can run on differe
 ### Prerequisites for each VM
 
 ```bash
-# Install Node.js 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo bash -
+# Install Node.js 24+ (required for QUIC/HTTP3; Node 18+ works for TLS and HTTP/2 only)
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
 sudo apt-get install -y nodejs
 
-# Clone and install
+# Clone and install — prebuilt quiche binary is pulled automatically for your platform
 git clone <repo-url>
 cd fuzzer
 npm install
@@ -174,6 +204,9 @@ Verify installation:
 
 ```bash
 node cli.js list
+
+# Verify QUIC/HTTP3 (optional)
+node test-quiche.js
 ```
 
 ### Use Case 1: Test how a server handles malicious client messages
@@ -492,7 +525,8 @@ Check **Local Target** in the toolbar. The host field is automatically set to `l
 |----------|-------------|-------------|
 | TLS | `tls.createServer()` with auto-generated cert | `tls.connect()` sends real ClientHello |
 | HTTP/2 | `http2.createSecureServer()` responds 200 OK | `http2.connect()` sends GET / |
-| QUIC | UDP socket responds with QUIC Initial + synthetic ServerHello | UDP socket sends QUIC Initial + synthetic ClientHello |
+| QUIC/HTTP3 | `createSecureServer()` via quiche — full TLS 1.3, multi-stream, responds 200 OK | `connect()` via quiche — full TLS 1.3, opens multiple HTTP/3 streams |
+| QUIC (fallback) | Raw UDP responds with QUIC Initial + synthetic ServerHello | Raw UDP sends QUIC Initial + synthetic ClientHello |
 
 ---
 
@@ -602,8 +636,11 @@ fuzzer/
     fuzzer-server.js            TLS server engine
     http2-fuzzer-client.js      HTTP/2 client engine
     http2-fuzzer-server.js      HTTP/2 server engine
-    quic-fuzzer-client.js       QUIC client engine
-    quic-fuzzer-server.js       QUIC server engine
+    quic-fuzzer-client.js       QUIC client engine (raw UDP)
+    quic-fuzzer-server.js       QUIC server engine (raw UDP)
+    quic-engines/
+      quiche-client.js          QUIC/HTTP3 client via quiche
+      quiche-server.js          QUIC/HTTP3 server via quiche
     raw-tcp.js                  Raw TCP socket (Linux, CAP_NET_RAW)
     well-behaved-server.js      Compliant server for local mode
     well-behaved-client.js      Compliant client for local mode
