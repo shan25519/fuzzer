@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Test QUIC scenarios in distributed mode with 1 worker.
-// Batch 1: Key categories (QZ well-behaved, QM virus, QN sandbox) — full coverage
-// Batch 2: Core fuzzing (QA-QF native QUIC) — full coverage
-// Batch 3: Adapted TLS (QG-QK) — sample of 50 to keep runtime reasonable
-// Batch 4: PAN/QO/QSCAN — sample of 30
+// Test HTTP/2 scenarios in distributed mode with 1 worker.
+// Batch 1: Key categories (AM well-behaved, AN virus, AO sandbox) — full coverage
+// Batch 2: Core fuzzing (AA-AL) — full coverage
+// Batch 3: PAN / PAN-PQC — full coverage
 
 const http = require('http');
 const { startAgent } = require('./lib/agent');
 const { WellBehavedServer } = require('./lib/well-behaved-server');
-const { listQuicClientScenarios } = require('./lib/quic-scenarios');
+const { listHttp2ClientScenarios } = require('./lib/http2-scenarios');
 
-const SERVER_PORT = 4433;
-const AGENT_PORT = 9250;
+const SERVER_PORT = 4434;
+const AGENT_PORT = 9251;
 
 function httpPost(port, path, body) {
   return new Promise((resolve, reject) => {
@@ -54,10 +53,11 @@ async function waitForDone(port, total, timeout = 1800000) {
 }
 
 async function runBatch(agentPort, serverPort, scenarioNames) {
+  if (scenarioNames.length === 0) return [];
   try { await httpPost(agentPort, '/stop', {}); } catch {}
   await new Promise(r => setTimeout(r, 500));
   const configResult = await httpPost(agentPort, '/configure', {
-    config: { host: 'localhost', port: serverPort, protocol: 'quic', workers: 1, timeout: 5000, delay: 50, baseline: false },
+    config: { host: 'localhost', port: serverPort, protocol: 'h2', workers: 1, timeout: 5000, delay: 50, baseline: false },
     scenarios: scenarioNames,
   });
   if (configResult.scenarioCount === 0) throw new Error('No scenarios resolved');
@@ -67,7 +67,7 @@ async function runBatch(agentPort, serverPort, scenarioNames) {
 }
 
 async function run() {
-  const allScenarios = listQuicClientScenarios();
+  const allScenarios = listHttp2ClientScenarios();
   const expectedMap = {};
   const categoryMap = {};
   for (const s of allScenarios) {
@@ -81,10 +81,10 @@ async function run() {
     byCategory[s.category].push(s.name);
   }
 
-  console.log(`Total QUIC client scenarios: ${allScenarios.length}`);
+  console.log(`Total HTTP/2 client scenarios: ${allScenarios.length}`);
 
   const server = new WellBehavedServer({ hostname: 'localhost', port: SERVER_PORT, logger: null });
-  await server.startQuic();
+  await server.startH2();
   const actualPort = server._actualPort || SERVER_PORT;
   console.log(`Server on port ${actualPort}`);
 
@@ -94,42 +94,29 @@ async function run() {
   const allResults = [];
 
   try {
-    // ── Batch 1: QZ + QM + QN (key categories) ──
-    const keyCats = ['QZ', 'QM', 'QN'];
+    // ── Batch 1: AM + AN + AO (key categories) ──
+    const keyCats = ['AM', 'AN', 'AO'];
     const keyNames = keyCats.flatMap(c => byCategory[c] || []);
     console.log(`\n── BATCH 1: Well-behaved + Virus + Sandbox (${keyNames.length} scenarios) ──`);
     const r1 = await runBatch(AGENT_PORT, actualPort, keyNames);
     allResults.push(...r1);
     console.log(`  Done: ${r1.length} results`);
 
-    // ── Batch 2: Native QUIC fuzzing (QA-QF) — small set, fast ──
-    const nativeCats = ['QA','QB','QC','QD','QE','QF'];
+    // ── Batch 2: Native HTTP/2 fuzzing (AA-AL) ──
+    const nativeCats = ['AA','AB','AC','AD','AE','AF','AG','AH','AI','AJ','AK','AL'];
     const nativeNames = nativeCats.flatMap(c => byCategory[c] || []);
-    console.log(`\n── BATCH 2: Native QUIC fuzz categories (${nativeNames.length} scenarios) ──`);
+    console.log(`\n── BATCH 2: Native HTTP/2 fuzz categories (${nativeNames.length} scenarios) ──`);
     const r2 = await runBatch(AGENT_PORT, actualPort, nativeNames);
     allResults.push(...r2);
     console.log(`  Done: ${r2.length} results`);
 
-    // ── Batch 3: Adapted TLS (QG-QK) — sample ──
-    const adaptedCats = ['QG','QH','QI','QJ','QK'];
-    const adaptedAll = adaptedCats.flatMap(c => byCategory[c] || []);
-    // Take every Nth to get a representative sample of ~100
-    const sampleSize = 100;
-    const step = Math.max(1, Math.floor(adaptedAll.length / sampleSize));
-    const adaptedSample = adaptedAll.filter((_, i) => i % step === 0);
-    console.log(`\n── BATCH 3: Adapted TLS sample (${adaptedSample.length}/${adaptedAll.length} scenarios) ──`);
-    const r3 = await runBatch(AGENT_PORT, actualPort, adaptedSample);
+    // ── Batch 3: PAN / PAN-PQC ──
+    const scanCats = ['PAN', 'PAN-PQC'];
+    const scanNames = scanCats.flatMap(c => byCategory[c] || []);
+    console.log(`\n── BATCH 3: Scan/probe categories (${scanNames.length} scenarios) ──`);
+    const r3 = await runBatch(AGENT_PORT, actualPort, scanNames);
     allResults.push(...r3);
     console.log(`  Done: ${r3.length} results`);
-
-    // ── Batch 4: PAN/QO/QSCAN — sample ──
-    const scanCats = ['PAN','QO','QSCAN'];
-    const scanAll = scanCats.flatMap(c => byCategory[c] || []);
-    const scanSample = scanAll.filter((_, i) => i % Math.max(1, Math.floor(scanAll.length / 30)) === 0);
-    console.log(`\n── BATCH 4: Scan/probe sample (${scanSample.length}/${scanAll.length} scenarios) ──`);
-    const r4 = await runBatch(AGENT_PORT, actualPort, scanSample);
-    allResults.push(...r4);
-    console.log(`  Done: ${r4.length} results`);
 
     // ═══════════════════════════════════════════════════
     // ANALYSIS
@@ -155,36 +142,36 @@ async function run() {
       const counts = {};
       for (const r of items) counts[r.status] = (counts[r.status] || 0) + 1;
       const parts = Object.entries(counts).sort().map(([k,v]) => `${k}:${v}`).join(' ');
-      console.log(`  ${cat.padEnd(6)} ${String(items.length).padStart(4)} total | ${parts}`);
+      console.log(`  ${cat.padEnd(8)} ${String(items.length).padStart(4)} total | ${parts}`);
     }
 
-    // ── Well-behaved (QZ) ──
+    // ── Well-behaved (AM) ──
     console.log('\n══════════════════════════════════════════════════');
-    console.log('  WELL-BEHAVED SCENARIOS (QZ)');
+    console.log('  WELL-BEHAVED SCENARIOS (AM)');
     console.log('══════════════════════════════════════════════════');
-    for (const r of (catResults.QZ || [])) {
+    for (const r of (catResults.AM || [])) {
       const expected = expectedMap[r.scenario];
       const ok = r.status === expected;
       console.log(`  ${ok ? '✓' : '✗ UNEXPECTED'} ${r.scenario}: ${r.status} (expected ${expected})`);
       console.log(`      response: ${(r.response || '').substring(0, 150)}`);
     }
 
-    // ── Virus (QM) ──
+    // ── Virus (AN) ──
     console.log('\n══════════════════════════════════════════════════');
-    console.log('  VIRUS / FIREWALL SCENARIOS (QM)');
+    console.log('  VIRUS / FIREWALL SCENARIOS (AN)');
     console.log('══════════════════════════════════════════════════');
-    for (const r of (catResults.QM || [])) {
+    for (const r of (catResults.AN || [])) {
       const expected = expectedMap[r.scenario];
       const ok = r.status === expected;
       console.log(`  ${ok ? '✓' : '✗'} ${r.scenario}: ${r.status} (expected ${expected})`);
       console.log(`      response: ${(r.response || '').substring(0, 150)}`);
     }
 
-    // ── Sandbox (QN) ──
+    // ── Sandbox (AO) ──
     console.log('\n══════════════════════════════════════════════════');
-    console.log('  SANDBOX SCENARIOS (QN)');
+    console.log('  SANDBOX SCENARIOS (AO)');
     console.log('══════════════════════════════════════════════════');
-    for (const r of (catResults.QN || [])) {
+    for (const r of (catResults.AO || [])) {
       const expected = expectedMap[r.scenario];
       const ok = r.status === expected;
       console.log(`  ${ok ? '✓' : '✗'} ${r.scenario}: ${r.status} (expected ${expected})`);

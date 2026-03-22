@@ -20,7 +20,7 @@ const USAGE = `
   client-side fuzzing scenarios directly against a target TLS server.
 
   Usage:
-    node client.js                          Start client agent (control on 0.0.0.0:9200)
+    node client.js                          Start client agent (control on [::]:9200)
     node client.js <host> <port> [options]  Run scenarios directly
 
   Agent options:

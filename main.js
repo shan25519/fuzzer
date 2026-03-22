@@ -412,10 +412,10 @@ ipcMain.handle('run-fuzzer', async (event, opts) => {
         // is consumed before the socket is transferred to a worker
         const tcpServer = net.createServer({ allowHalfOpen: true, pauseOnConnect: true });
         await new Promise((res, rej) => {
-          tcpServer.listen(portNum, '0.0.0.0', res);
+          tcpServer.listen(portNum, '::', res);
           tcpServer.once('error', rej);
         });
-        send('fuzzer-packet', { type: 'info', message: `Listening on 0.0.0.0:${portNum} — dispatching to ${numWorkers} workers` });
+        send('fuzzer-packet', { type: 'info', message: `Listening on [::]:${portNum} — dispatching to ${numWorkers} workers` });
 
         // Workers assigned a scenario wait for a socket; incoming connections
         // are paired with waiting workers. This allows true parallelism when

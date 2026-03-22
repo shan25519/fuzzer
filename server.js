@@ -22,7 +22,7 @@ const USAGE = `
   connections and responds with fuzzed TLS handshake messages.
 
   Usage:
-    node server.js                    Start server agent (control on 0.0.0.0:9201)
+    node server.js                    Start server agent (control on [::]:9201)
     node server.js <port> [options]   Run scenarios directly
 
   Agent options:
@@ -220,8 +220,8 @@ async function primaryMain(args) {
   // Create shared TCP server in primary — pauseOnConnect ensures no data
   // is consumed before the socket is transferred to the worker
   const tcpServer = net.createServer({ allowHalfOpen: true, pauseOnConnect: true });
-  tcpServer.listen(port, '0.0.0.0', () => {
-    console.log(`  \x1b[32mListening on 0.0.0.0:${port} — dispatching to ${workerCount} workers\x1b[0m\n`);
+  tcpServer.listen(port, '::', () => {
+    console.log(`  \x1b[32mListening on [::]:${port} — dispatching to ${workerCount} workers\x1b[0m\n`);
   });
 
   const queue = [...scenarios];
