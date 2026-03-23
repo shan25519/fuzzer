@@ -281,6 +281,35 @@
         clientAgentIp.disabled = true;
         serverAgentIp.disabled = true;
         startStatusPolling();
+
+        // After connecting, if we have scenarios selected, also push the configuration
+        // so the agents know the target port immediately.
+        const scenarios = getSelectedScenarios();
+        if (scenarios.length > 0) {
+          const host = hostInput.value.trim() || 'localhost';
+          const port = parseInt(portInput.value, 10) || 443;
+          const delay = parseInt(delayInput.value, 10) || 100;
+          const timeout = parseInt(timeoutInput.value, 10) || 5000;
+          const workers = parseInt(workersInput.value, 10) || 1;
+
+          // Simple split by side
+          const clientScenarios = [];
+          const serverScenarios = [];
+          const checkboxes = scenariosList.querySelectorAll('input[type="checkbox"]:checked');
+          for (const cb of checkboxes) {
+            if (cb.dataset.side === 'client') clientScenarios.push(cb.value);
+            else if (cb.dataset.side === 'server') serverScenarios.push(cb.value);
+          }
+
+          addLogEntry('info', `Pushing configuration to agents (Port: ${port})...`);
+          await window.fuzzer.distributedConfigure({
+            clientScenarios: clientScenarios.length > 0 ? clientScenarios : null,
+            serverScenarios: serverScenarios.length > 0 ? serverScenarios : null,
+            clientConfig: { host, port, delay, timeout, workers, protocol: activeProtocol, baseline: baselineCheck.checked },
+            serverConfig: { hostname: host, port, delay, timeout, workers: 1, protocol: activeProtocol, baseline: baselineCheck.checked },
+          });
+          addLogEntry('info', `Agents configured and ready on port ${port}`);
+        }
       } else {
         connectBtn.disabled = false;
       }
@@ -1527,7 +1556,8 @@
     if (isBusy) rerunFailedBtn.disabled = true;
 
     if (distributedMode) {
-      connectBtn.disabled = running || agentsConnected;
+      // Allow Connect again even if already connected, to update the target port/config
+      connectBtn.disabled = running;
       disconnectBtn.disabled = running || !agentsConnected;
     }
   }
