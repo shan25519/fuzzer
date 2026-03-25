@@ -14,6 +14,8 @@ Supports three interfaces: **Electron GUI**, **CLI**, and **distributed mode** w
 - **Electron** 40+ (only needed for the GUI)
 - **npm** (for dependency installation)
 
+> **Important:** You must run `npm install` from the root of the cloned repository (the same directory that contains `package.json`, `client.js`, and `server.js`).
+
 ```bash
 git clone <repo-url>
 cd fuzzer
